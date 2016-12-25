@@ -11,5 +11,8 @@ python:
   - "nightly" # currently points to 3.7-dev
 # command to install dependencies
 install: "pip install -r requirements.txt"
+# fix perms
+before_install:
+  - chmod +x test/nfcu.py
 # command to run tests
 script: test/nfcu.py
