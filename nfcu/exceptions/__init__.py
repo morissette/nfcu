@@ -24,3 +24,10 @@ class NFCUMFAError(Exception):
     Raised when MFA fails
     """
     pass
+
+class NFCUSummaryError(Exception):
+    """
+    Raised when Account Summary returns
+    failed
+    """
+    pass

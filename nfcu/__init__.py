@@ -55,13 +55,12 @@ class NFCU(object):
         )
         if response.status_code == 200:
             return response.json()
-        else:
-            raise NFCUGetError(
-                "Received error from NFCU API: {text}, {code}".format(
-                    text=response.content,
-                    code=response.status_code
-                )
+        raise NFCUGetError(
+            "Received error from NFCU API: {text}, {code}".format(
+                text=response.content,
+                code=response.status_code
             )
+        )
 
     def _post(self, endpoint, post_data):
         """
@@ -80,13 +79,12 @@ class NFCU(object):
         )
         if response.status_code == 200:
             return response
-        else:
-            raise NFCUPostError(
-                "Received error from NFCU API: {text}, {code}".format(
-                    text=response.content,
-                    code=response.status_code
-                )
+        raise NFCUPostError(
+            "Received error from NFCU API: {text}, {code}".format(
+                text=response.content,
+                code=response.status_code
             )
+        )
 
     def login(self):
         """
@@ -110,12 +108,12 @@ class NFCU(object):
         if message['loginv2']['status'] == 'SUCCESS':
             self._cookie = response.cookies
             self.submit_mfa()
-        else:
-            raise NFCULoginError(
-                "Login error: {error}".format(
-                    error=message['loginv2']['errors'][0]['errorMsg']
-                )
+            return
+        raise NFCULoginError(
+            "Login error: {error}".format(
+                error=message['loginv2']['errors'][0]['errorMsg']
             )
+        )
 
     def submit_mfa(self):
         """
@@ -137,13 +135,12 @@ class NFCU(object):
         message = response.json()
 
         if message['riskCheck']['status'] == 'SUCCESS':
-            pass
-        else:
-            raise NFCUMFAError(
-                "Unable to Proceed: {error}".format(
-                    error=message['riskCheck']['errors'][0]['errorMsg']
-                )
+            return
+        raise NFCUMFAError(
+            "Unable to Proceed: {error}".format(
+                error=message['riskCheck']['errors'][0]['errorMsg']
             )
+        )
 
     def get_account_summary(self):
         """
@@ -152,4 +149,10 @@ class NFCU(object):
         :param callback: Callback func
         """
         response = self._get("NativeBanking/services/accountSummary")
-        return response
+        if response['accountSummary']['status'] == 'SUCCESS':
+            return response
+        raise NFCUSummaryError(
+            "Unable to get account summary: {error}".format(
+                response['accountSummary']['errors'][0]['errorMsg']
+            )
+        )
