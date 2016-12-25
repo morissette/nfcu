@@ -11,3 +11,10 @@ class NFCUPostError(Exception):
     during a POST request
     """
     pass
+
+class NFCULoginError(Exception):
+    """
+    Raised when receiving a error from API
+    upon login attempt
+    """
+    pass

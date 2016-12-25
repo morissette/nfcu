@@ -70,7 +70,7 @@ class NFCU(object):
             data=json.dumps(post_data)
         )
         if response.status_code == 200:
-            return response.json()
+            return response.json(), response.headers
         else:
             raise NFCUPostError(
                 "Received error from NFCU API: {text}, {code}".format(
@@ -86,7 +86,7 @@ class NFCU(object):
         :param password: NFCU password
         :param callback: Callback func
         """
-        response = self._post(
+        response, headers = self._post(
             "Authenticator/services/loginv2",
             {
                 "appVersion": "6.0.1",
@@ -97,7 +97,15 @@ class NFCU(object):
                 "password": self.password
             }
         )
-        print(response)
+        if response['loginv2']['status'] == 'SUCCESS':
+            # Set Headers
+            print(headers)
+        else:
+            raise NFCULoginError(
+                "Login error: {error}".format(
+                    error=response['loginv2']['errors'][0]['errorMsg']
+                )
+            )
 
     def get_post_auth_config(self, callback):
         """
