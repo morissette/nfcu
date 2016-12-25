@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/morissette/nfcu.svg?branch=master)](https://travis-ci.org/morissette/nfcu)
+[![Coverage Status](https://coveralls.io/repos/github/morissette/nfcu/badge.svg?branch=master)](https://coveralls.io/github/morissette/nfcu?branch=master)
 
 # Navy Federal
 
