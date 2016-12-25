@@ -1,6 +1,7 @@
 """
 Place Holder Tests
 """
+import nfcu
 import pytest
 
 class TestNFCU:

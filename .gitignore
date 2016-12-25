@@ -1,6 +1,8 @@
 # Custom Ignores
 venv/
 node-nfcu/
+creds
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
