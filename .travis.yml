@@ -11,3 +11,5 @@ before_install:
   - chmod +x test/nfcu.py
 # command to run tests
 script: pytest test/nfcu.py
+after_success:
+  - coveralls
