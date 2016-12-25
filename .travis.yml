@@ -15,4 +15,4 @@ install: "pip install -r requirements.txt"
 before_install:
   - chmod +x test/nfcu.py
 # command to run tests
-script: test/nfcu.py
+script: pytest test/nfcu.py
