@@ -145,21 +145,6 @@ class NFCU(object):
                 )
             )
 
-    def get_post_auth_config(self, callback):
-        """
-        Bunch of configuration info after
-        authentication
-        :param callback: Callback func
-        """
-        pass
-
-    def get_member_summary(self, callback):
-        """
-        Get summary of the logged-in user
-        :param callback: Callback func
-        """
-        pass
-
     def get_account_summary(self):
         """
         Get summary of all of the logged-in
@@ -167,13 +152,4 @@ class NFCU(object):
         :param callback: Callback func
         """
         response = self._get("NativeBanking/services/accountSummary")
-        print(response)
-
-    def get_account_details(self, account_id, callback):
-        """
-        Get specific account details for a
-        given account ID
-        :param account_id: Account ID
-        :param callback: Callback func
-        """
-        pass
+        return response

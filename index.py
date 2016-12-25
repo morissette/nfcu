@@ -17,6 +17,6 @@ if __name__ == "__main__":
 
     if access_number and password:
         bank = nfcu.NFCU(access_number, password)
-        bank.get_account_summary()
+        print(json.dumps(bank.get_account_summary()))
     else:
         print("Please configure .config/creds, see .config/creds-sample")
