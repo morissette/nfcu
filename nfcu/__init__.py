@@ -5,6 +5,7 @@ Fork of https://github.com/tjhorner/node-nfcu
 from nfcu.exceptions import *
 
 import json
+import os
 import requests
 
 class NFCU(object):
@@ -21,6 +22,8 @@ class NFCU(object):
         """
         self.access_number = access_number
         self.password = password
+        self._cookie = None
+        self.login()
 
     def _get_headers(self, extra=None):
         """
@@ -42,10 +45,13 @@ class NFCU(object):
         :param endpoint: API URI
         :param params: Optional extra params
         """
+        cookie = self._cookie
+
         response = requests.get(
             self.API_BASE + endpoint,
             headers=self._get_headers(),
-            params=params
+            params=params,
+            cookies=cookie
         )
         if response.status_code == 200:
             return response.json()
@@ -64,13 +70,16 @@ class NFCU(object):
         :param endpoint: API URI
         :param post_data: Post Data
         """
+        cookie = self._cookie
+
         response = requests.post(
             self.API_BASE + endpoint,
             headers=self._get_headers(),
-            data=json.dumps(post_data)
+            data=json.dumps(post_data),
+            cookies=cookie
         )
         if response.status_code == 200:
-            return response.json(), response.headers
+            return response
         else:
             raise NFCUPostError(
                 "Received error from NFCU API: {text}, {code}".format(
@@ -86,7 +95,7 @@ class NFCU(object):
         :param password: NFCU password
         :param callback: Callback func
         """
-        response, headers = self._post(
+        response = self._post(
             "Authenticator/services/loginv2",
             {
                 "appVersion": "6.0.1",
@@ -97,13 +106,42 @@ class NFCU(object):
                 "password": self.password
             }
         )
-        if response['loginv2']['status'] == 'SUCCESS':
-            # Set Headers
-            print(headers)
+        message = response.json()
+        if message['loginv2']['status'] == 'SUCCESS':
+            self._cookie = response.cookies
+            self.submit_mfa()
         else:
             raise NFCULoginError(
                 "Login error: {error}".format(
-                    error=response['loginv2']['errors'][0]['errorMsg']
+                    error=message['loginv2']['errors'][0]['errorMsg']
+                )
+            )
+
+    def submit_mfa(self):
+        """
+        MFA to auth request
+        """
+        data_file = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "data/riskcheck.json"
+            )
+        )
+        with open(data_file) as df:
+            payload = json.load(df)
+
+        response = self._post(
+            "MFA/services/riskCheck",
+            payload
+        )
+        message = response.json()
+
+        if message['riskCheck']['status'] == 'SUCCESS':
+            pass
+        else:
+            raise NFCUMFAError(
+                "Unable to Proceed: {error}".format(
+                    error=message['riskCheck']['errors'][0]['errorMsg']
                 )
             )
 
@@ -122,13 +160,14 @@ class NFCU(object):
         """
         pass
 
-    def get_account_summary(self, callback):
+    def get_account_summary(self):
         """
         Get summary of all of the logged-in
         user's accounts
         :param callback: Callback func
         """
-        pass
+        response = self._get("NativeBanking/services/accountSummary")
+        print(response)
 
     def get_account_details(self, account_id, callback):
         """

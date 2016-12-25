@@ -18,3 +18,9 @@ class NFCULoginError(Exception):
     upon login attempt
     """
     pass
+
+class NFCUMFAError(Exception):
+    """
+    Raised when MFA fails
+    """
+    pass
