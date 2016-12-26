@@ -7,6 +7,8 @@ pip install -r requirements.txt
 
 # Add NFCU Module
 zip -ur -9 nfcu_alexa_skill.zip nfcu/ -i \*.py
+zip -ur -9 nfcu_alexa_skill.zip nfcu/ -i \*.json
 
 # Add Dependencies to Zip
-zip -ur -9 nfcu_alexa_skill.zip venv/lib/python3.5/site-packages/ -i \*.py
+cd venv/lib/python2.7/site-packages
+zip -ur -9 ~/Projects/Personal/Alexa/nfcu/nfcu_alexa_skill.zip * -i \*.py \*.pem

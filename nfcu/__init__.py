@@ -2,6 +2,7 @@
 Navy Federal Module
 Fork of https://github.com/tjhorner/node-nfcu
 """
+from nfcu.constants import RISK_JSON
 from nfcu.exceptions import *
 
 import json
@@ -119,14 +120,18 @@ class NFCU(object):
         """
         MFA to auth request
         """
-        data_file = os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__),
-                "data/riskcheck.json"
+        try:
+            data_file = os.path.abspath(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    "data/riskcheck.json"
+                )
             )
-        )
-        with open(data_file) as df:
-            payload = json.load(df)
+            with open(data_file) as df:
+                payload = json.load(df)
+        except Exception as e:
+            print(e.message)
+            payload = json.loads(RISK_JSON)
 
         response = self._post(
             "MFA/services/riskCheck",
