@@ -6,7 +6,11 @@ Account Data
 from __future__ import print_function
 import nfcu
 
+
 def build_speechlet_response(title, output, reprompt_text, should_end_session):
+    """
+    Build alexa speechlet response
+    """
     return {
         'outputSpeech': {
             'type': 'PlainText',
@@ -28,6 +32,9 @@ def build_speechlet_response(title, output, reprompt_text, should_end_session):
 
 
 def build_response(session_attributes, speechlet_response):
+    """
+    Build response for Alexa
+    """
     return {
         'version': '1.0',
         'sessionAttributes': session_attributes,
@@ -36,12 +43,17 @@ def build_response(session_attributes, speechlet_response):
 
 
 def get_welcome_response():
+    """
+    Set welcome message from alexa
+    """
     session_attributes = {}
     card_title = "Welcome"
     speech_output = "Do you want to check your balance?"
 
-    # If the user either does not reply to the welcome message or says something
-    # that is not understood, they will be prompted again with this text.
+    # If the user either does not reply to the
+    # welcome message or says something
+    # that is not understood, they will be prompted
+    # again with this text.
     reprompt_text = "Do you want to check your balance?"
 
     should_end_session = True
@@ -66,7 +78,8 @@ def get_account_summary():
     for item in data["accountSummary"]["data"]["accountCategories"]:
         total += item["totalBalance"]
 
-    speech_output = "Your total account balance is ${total}".format(total=total)
+    speech_output = "Your total account balance is ${total}".format(
+        total=total)
 
     reprompt_text = speech_output
     should_end_session = True
@@ -74,7 +87,8 @@ def get_account_summary():
     return build_response(session_attributes, build_speechlet_response(
         card_title, speech_output, reprompt_text, should_end_session))
 
-def get_specific_account_balance(account_type="Checking"):
+
+def get_specific_account_balance():
     """
     Get specific account balance
     """
@@ -90,7 +104,8 @@ def get_specific_account_balance(account_type="Checking"):
     for item in data["accountSummary"]["data"]["accountCategories"]:
         total += item["totalBalance"]
 
-    speech_output = "Your total account balance is ${total}".format(total=total)
+    speech_output = "Your total account balance is ${total}".format(
+        total=total)
 
     reprompt_text = speech_output
     should_end_session = True
@@ -98,7 +113,11 @@ def get_specific_account_balance(account_type="Checking"):
     return build_response(session_attributes, build_speechlet_response(
         card_title, speech_output, reprompt_text, should_end_session))
 
+
 def handle_session_end_request():
+    """
+    Set alexa response on close app
+    """
     card_title = "Session Ended"
     speech_output = "Bye now."
 
@@ -114,8 +133,9 @@ def on_session_started(session_started_request, session):
     Called when the session starts
     """
 
-    print("on_session_started requestId=" + session_started_request['requestId']
-          + ", sessionId=" + session['sessionId'])
+    print("on_session_started requestId=" +
+          session_started_request['requestId'] +
+          ", sessionId=" + session['sessionId'])
 
 
 def on_launch(launch_request, session):
@@ -138,18 +158,15 @@ def on_intent(intent_request, session):
     print("on_intent requestId=" + intent_request['requestId'] +
           ", sessionId=" + session['sessionId'])
 
-    intent = intent_request['intent']
     intent_name = intent_request['intent']['name']
 
     # Dispatch to your skill's intent handlers
     if intent_name == "GetAccountSummary":
         return get_account_summary()
-    elif intent_name == "GetAccountSummarySpec":
-        specific_account = intent_request['intent']['slots']['Account']['value']
-        return get_specific_account_balance(specific_account)
     elif intent_name == "AMAZON.HelpIntent":
         return get_welcome_response()
-    elif intent_name == "AMAZON.CancelIntent" or intent_name == "AMAZON.StopIntent":
+    elif intent_name == "AMAZON.CancelIntent" or \
+            intent_name == "AMAZON.StopIntent":
         return handle_session_end_request()
     else:
         raise ValueError("Invalid intent")
@@ -167,7 +184,7 @@ def on_session_ended(session_ended_request, session):
 
 
 # --------------- Main handler ------------------
-def lambda_handler(event, context):
+def lambda_handler(event):
     """
     Route the incoming request based on type
     (LaunchRequest, IntentRequest, etc.)
@@ -177,8 +194,9 @@ def lambda_handler(event, context):
           event['session']['application']['applicationId'])
 
     """
-    Uncomment this if statement and populate with your skill's application ID to
-    prevent someone else from configuring a skill that sends requests to this
+    Uncomment this if statement and populate with
+    your skill's application ID to prevent someone
+    else from configuring a skill that sends requests to this
     function.
     """
     # if (event['session']['application']['applicationId'] !=
