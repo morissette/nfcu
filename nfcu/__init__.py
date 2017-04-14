@@ -2,12 +2,13 @@
 Navy Federal Module
 Fork of https://github.com/tjhorner/node-nfcu
 """
-from nfcu.constants import RISK_JSON
-from nfcu.exceptions import *
-
 import json
 import os
 import requests
+
+from nfcu.constants import RISK_JSON
+from nfcu.exceptions import *
+
 
 class NFCU(object):
     """
@@ -33,7 +34,8 @@ class NFCU(object):
         """
         headers = {
             "Accept": "application/json; charset=UTF-8",
-            "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 6P Build/MMB29M)", # Imitate a Nexus 6P
+            # Imitate a Nexus 6P
+            "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 6P Build/MMB29M)",
             "Content-Type": "application/json",
             "Host": "mservices.navyfcu.org"
         }
@@ -127,10 +129,10 @@ class NFCU(object):
                     "data/riskcheck.json"
                 )
             )
-            with open(data_file) as df:
-                payload = json.load(df)
-        except Exception as e:
-            print(e.message)
+            with open(data_file) as file_handle:
+                payload = json.load(file_handle)
+        except Exception as error:
+            print error.message
             payload = json.loads(RISK_JSON)
 
         response = self._post(
@@ -158,6 +160,6 @@ class NFCU(object):
             return response
         raise NFCUSummaryError(
             "Unable to get account summary: {error}".format(
-                response['accountSummary']['errors'][0]['errorMsg']
+                error=response['accountSummary']['errors'][0]['errorMsg']
             )
         )
