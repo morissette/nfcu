@@ -27,7 +27,7 @@ class NFCU(object):
         self._cookie = None
         self.login()
 
-    def _get_headers(self, extra=None):
+    def _get_headers(self):
         """
         Get Headers for call
         :param extra: Extra headers

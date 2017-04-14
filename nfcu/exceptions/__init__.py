@@ -1,9 +1,15 @@
+"""
+Exceptions for NFCU Package
+"""
+
+
 class NFCUGetError(Exception):
     """
     Raised when receiving a non 200 status code
     during a GET request
     """
     pass
+
 
 class NFCUPostError(Exception):
     """
@@ -12,6 +18,7 @@ class NFCUPostError(Exception):
     """
     pass
 
+
 class NFCULoginError(Exception):
     """
     Raised when receiving a error from API
@@ -19,11 +26,13 @@ class NFCULoginError(Exception):
     """
     pass
 
+
 class NFCUMFAError(Exception):
     """
     Raised when MFA fails
     """
     pass
+
 
 class NFCUSummaryError(Exception):
     """
