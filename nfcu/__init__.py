@@ -133,7 +133,7 @@ class NFCU(object):
                 payload = json.load(file_handle)
         except Exception as error:
             print error.message
-            payload = json.loads(RISK_JSON)
+            payload = json.dumps(RISK_JSON)
 
         response = self._post(
             "MFA/services/riskCheck",
