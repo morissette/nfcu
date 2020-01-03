@@ -73,6 +73,7 @@ class NFCU(object):
         :param post_data: Post Data
         """
         cookie = self._cookie
+        print(cookie)
 
         response = requests.post(
             self.API_BASE + endpoint,
@@ -132,7 +133,7 @@ class NFCU(object):
             with open(data_file) as file_handle:
                 payload = json.load(file_handle)
         except Exception as error:
-            print error.message
+            print(error.message)
             payload = json.dumps(RISK_JSON)
 
         response = self._post(
