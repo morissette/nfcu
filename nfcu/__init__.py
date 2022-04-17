@@ -10,71 +10,58 @@ from nfcu.constants import RISK_JSON
 from nfcu.exceptions import *
 
 
-class NFCU(object):
-    """
-    Navy Federal Class
-    """
+class NFCU:
+    '''Navy Federal Class'''
 
-    API_BASE = "https://mservices.navyfcu.org/"
-    DATE_FORMAT = "YYYY-MM-DD"
+    API_BASE = 'https://mservices.navyfcu.org/'
+    DATE_FORMAT = 'YYYY-MM-DD'
 
     def __init__(self, access_number, password):
-        """
-        Constructor method
-        """
+        '''Make NFCU object'''
         self.access_number = access_number
         self.password = password
         self._cookie = None
         self.login()
 
-    def _get_headers(self):
-        """
-        Get Headers for call
-        :param extra: Extra headers
-        """
+    @staticmethod
+    def _get_headers():
+        '''Get Headers for call'''
         headers = {
-            "Accept": "application/json; charset=UTF-8",
+            'Accept': 'application/json; charset=UTF-8',
             # Imitate a Nexus 6P
-            "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 6P Build/MMB29M)",
-            "Content-Type": "application/json",
-            "Host": "mservices.navyfcu.org"
+            'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 6.0.1; Nexus 6P Build/MMB29M)',
+            'Content-Type': 'application/json',
+            'Host': 'mservices.navyfcu.org'
         }
         return headers
 
-    def _get(self, endpoint, params={}):
-        """
-        Wrapper for GETting requests with
+    def _get(self, endpoint):
+        '''Wrapper for GETting requests with
         authentication
+
         :param endpoint: API URI
-        :param params: Optional extra params
-        """
+        '''
         cookie = self._cookie
 
         response = requests.get(
             self.API_BASE + endpoint,
             headers=self._get_headers(),
-            params=params,
             cookies=cookie
         )
         if response.status_code == 200:
             return response.json()
         raise NFCUGetError(
-            "Received error from NFCU API: {text}, {code}".format(
-                text=response.content,
-                code=response.status_code
-            )
+            f'Received error from NGCU API: {response.content}, {response.status_code}'
         )
 
     def _post(self, endpoint, post_data):
-        """
-        Wrapper for POSTing requests with
+        '''Wrapper for POSTing requests with
         authentication
+
         :param endpoint: API URI
         :param post_data: Post Data
-        """
+        '''
         cookie = self._cookie
-        print(cookie)
-
         response = requests.post(
             self.API_BASE + endpoint,
             headers=self._get_headers(),
@@ -84,28 +71,25 @@ class NFCU(object):
         if response.status_code == 200:
             return response
         raise NFCUPostError(
-            "Received error from NFCU API: {text}, {code}".format(
-                text=response.content,
-                code=response.status_code
-            )
+            f'Received error from NFCU API: {response.content}, {response.status_code}'
         )
 
     def login(self):
-        """
-        Login to NFCU
+        '''Login to NFCU
+
         :param access_number: NFCU Access Number
         :param password: NFCU password
         :param callback: Callback func
-        """
+        '''
         response = self._post(
-            "Authenticator/services/loginv2",
+            'Authenticator/services/loginv3',
             {
-                "appVersion": "6.0.1",
-                "deviceModel": "Nexus 6p",
-                "osPlatform": "AND",
-                "osVersion": "6.0.1",
-                "username": self.access_number,
-                "password": self.password
+                'appVersion': '6.0.1',
+                'deviceModel': 'Nexus 6p',
+                'osPlatform': 'AND',
+                'osVersion': '6.0.1',
+                'username': self.access_number,
+                'password': self.password
             }
         )
         message = response.json()
@@ -114,30 +98,26 @@ class NFCU(object):
             self.submit_mfa()
             return
         raise NFCULoginError(
-            "Login error: {error}".format(
-                error=message['loginv2']['errors'][0]['errorMsg']
-            )
+            f'Login error: {message}'
         )
 
     def submit_mfa(self):
-        """
-        MFA to auth request
-        """
+        '''MFA to auth request'''
         try:
             data_file = os.path.abspath(
                 os.path.join(
                     os.path.dirname(__file__),
-                    "data/riskcheck.json"
+                    'data/riskcheck.json'
                 )
             )
-            with open(data_file) as file_handle:
+            with open(data_file, encoding='utf8') as file_handle:
                 payload = json.load(file_handle)
-        except Exception as error:
-            print(error.message)
+        except json.JSONDecodeError as error:
+            print(error.msg)
             payload = json.dumps(RISK_JSON)
 
         response = self._post(
-            "MFA/services/riskCheck",
+            'MFA/services/riskCheck',
             payload
         )
         message = response.json()
@@ -145,22 +125,18 @@ class NFCU(object):
         if message['riskCheck']['status'] == 'SUCCESS':
             return
         raise NFCUMFAError(
-            "Unable to Proceed: {error}".format(
-                error=message['riskCheck']['errors'][0]['errorMsg']
-            )
+            f'Unable to proceed: {message}'
         )
 
     def get_account_summary(self):
-        """
-        Get summary of all of the logged-in
+        '''Get summary of all of the logged-in
         user's accounts
+
         :param callback: Callback func
-        """
-        response = self._get("NativeBanking/services/accountSummary")
+        '''
+        response = self._get('NativeBanking/services/accountSummary')
         if response['accountSummary']['status'] == 'SUCCESS':
             return response
         raise NFCUSummaryError(
-            "Unable to get account summary: {error}".format(
-                error=response['accountSummary']['errors'][0]['errorMsg']
-            )
+            f'Unable to get account summary: {response}'
         )
