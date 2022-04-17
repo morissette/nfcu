@@ -2,7 +2,7 @@
 
 _Completed items will be ~~striked~~_
 
-## Working on / done
+## Backlog
 
 1. Migrate from travis-ci.org to travis-ci.com
 2. ~~Update .travis.yml to use relevant python versions~~
@@ -11,9 +11,8 @@ _Completed items will be ~~striked~~_
 5. ~~Add requirements-test.txt~~
 6. Update .travis.yml to do linting, code style
 7. Finish reverse enginneering mobile api or revert to screen scraping eww
-
-## Backlog
-
-1. Write unit tests
-2. Make functional again
-3. Publish new version
+8. Write unit tests
+9. Make functional again
+10. Remember how to publish releases
+11. Publish new version
+12. Add automated releases to CI config
