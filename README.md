@@ -4,6 +4,9 @@
 # Navy Federal
 Navy Federal Credit Union Python Module
 
+# Update
+* 2022-04-17: Worked on reverse engineering the mobile app auhentication via mitmproxy and HTTP proxy setup on iPhone network. Saved all of the TLS flows still trying to determine if this method is viable as there appears to be a multitude of device registration steps through third parties. Will need to remove the app and start from scratch to get a better view.
+
 ### Based On
 A simple interface to Navy Federal's closed API based on the node version here:
 
