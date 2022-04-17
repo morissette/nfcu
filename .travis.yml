@@ -6,14 +6,28 @@ python:
   - "3.9"
 
 # command to install dependencies
-install: "pip install -r requirements.txt"
+install:
+  - pip install -r requirements.txt
+  - pip install -r requirements-test.txt
 
 # install nfcu
 before_install:
   - pip install -e .
 
-# command to run tests
-script: pytest test/nfcu.py
+stages:
+  - lint
+  - test
+
+jobs:
+  include:
+    - stage: lint
+      name: "pylint"
+      script: pylint nfcu/
+    - name: "pycodestyle"
+      script: pycodestyle nfcu/
+    - stage: test
+      name: "pytest"
+      script: pytest test/
 
 # code coverage
 after_success:
