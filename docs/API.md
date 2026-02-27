@@ -38,13 +38,13 @@
 ```python
 from nfcu import NFCU
 
-client = NFCU("m0rissette", "my_password")
+client = NFCU("your_username", "your_password")
 
 # Step 1: initiate login, get MFA phone options
 phone_options = client.login()
 print(phone_options)
-# [{"phoneNumber": "*7761", "phoneType": "M",
-#   "phoneId": "MDAwMDAwMDQ4MzM0..."}]
+# [{"phoneNumber": "*1234", "phoneType": "M",
+#   "phoneId": "cGhvbmUtaWQtcGxhY2Vob2xkZXI=..."}]
 
 # Step 2: request OTP
 client.request_otp()  # uses first option by default
@@ -138,9 +138,9 @@ numbers eligible for OTP delivery.
 
 ```json
 {
-  "phoneNumber": "*7761",
+  "phoneNumber": "*1234",
   "phoneType": "M",
-  "phoneId": "MDAwMDAwMDQ4MzM0MzhNNzU3OTY5Nzc2MQ=="
+  "phoneId": "cGhvbmUtaWQtcGxhY2Vob2xkZXI="
 }
 ```
 
@@ -452,7 +452,7 @@ except NFCUAPIError as e:
 ## Known Account IDs
 
 These UUIDs were observed during traffic capture on 2026-02-27 for
-access number 4833438.  They will differ for other members.
+a specific member account.  They will differ for all members.
 
 | Account | Display Name | UUID |
 |---------|-------------|------|

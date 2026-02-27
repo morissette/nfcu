@@ -94,7 +94,7 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
 
     Usage::
 
-        client = NFCU("m0rissette", "s3cr3t")
+        client = NFCU("your_username", "your_password")
         options = client.login()            # returns list of MFA phone options
         client.request_otp(options[0]["phoneId"])
         client.submit_mfa(input("OTP: "))  # blocks until you enter the code
@@ -276,7 +276,7 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
 
         Returns:
             List of phone number dicts, each containing at least:
-              - ``phoneNumber`` – masked number, e.g. ``"*7761"``
+              - ``phoneNumber`` – masked number, e.g. ``"*1234"``
               - ``phoneType``   – ``"M"`` (mobile) or ``"H"`` (home)
               - ``phoneId``     – base64 token used to request an OTP
 
@@ -286,8 +286,8 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         Example::
 
             options = client.login()
-            # options[0] == {"phoneNumber": "*7761", "phoneType": "M",
-            #                "phoneId": "MDAwMDAwMDQ4..."}
+            # options[0] == {"phoneNumber": "*1234", "phoneType": "M",
+            #                "phoneId": "cGhvbmUtaWQ..."}
         """
         # Step 1: Authenticate with username / password + device fingerprint.
         # The server returns Bearer token 1 in the `authorization` header.
@@ -340,7 +340,7 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
                 "phoneId": pid,
                 # deviceName is the last 4 digits of the phone number; extracted
                 # from the phoneId token or set to a placeholder.
-                "deviceName": pid[-4:] if len(pid) >= 4 else "7761",
+                "deviceName": pid[-4:] if len(pid) >= 4 else "0000",
                 "otpType": "SMS",
                 "workflow": "login",
             },

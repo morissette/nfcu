@@ -23,11 +23,11 @@ rewrite targets the current Backbase microservices API at
 ```python
 from nfcu import NFCU
 
-client = NFCU("m0rissette", "my_password")
+client = NFCU("your_username", "your_password")
 
 # 1. Login — returns MFA phone options
 phones = client.login()
-print(phones)  # [{"phoneNumber": "*7761", "phoneId": "..."}]
+print(phones)  # [{"phoneNumber": "*1234", "phoneId": "..."}]
 
 # 2. Request an OTP via SMS
 client.request_otp()
@@ -88,7 +88,7 @@ To intercept and analyse NFCU app traffic yourself, see
 Store credentials in `.config/creds` (gitignored):
 
 ```json
-{"username": "m0rissette", "password": "your_password"}
+{"username": "your_username", "password": "your_password"}
 ```
 
 Example script: `example.py`

@@ -47,9 +47,9 @@ _FP_MINIMAL = fp.encode(_PLAIN)
 
 PHONE_OPTIONS = [
     {
-        "phoneNumber": "*7761",
+        "phoneNumber": "*1234",
         "phoneType": "M",
-        "phoneId": "MDAwMDAwMDQ4MzM0MzhNNzU3OTY5Nzc2MQ==",
+        "phoneId": "cGhvbmUtaWQtcGxhY2Vob2xkZXI=",
     }
 ]
 

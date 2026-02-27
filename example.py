@@ -2,7 +2,7 @@
 NFCU example — demonstrates the full login flow and account data retrieval.
 
 Credentials are loaded from .config/creds (gitignored):
-  {"username": "m0rissette", "password": "your_password"}
+  {"username": "your_username", "password": "your_password"}
 """
 import json
 import sys
