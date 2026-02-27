@@ -18,8 +18,10 @@ Authentication flow (six steps)
      ``x-xsrf-token`` request header for all subsequent calls.
 
   1. ``POST /api/auth/mobile/authn``
-     Send username, password, and device fingerprint.  Server returns Bearer
-     token 1 in the ``authorization`` response header.
+     Send username, password, and device fingerprint.  Also sends the Akamai
+     BM sensor data in ``x-acf-sensor-data``; without it the Akamai edge
+     returns a synthetic LGN014 instead of forwarding to the backend.
+     Server returns Bearer token 1 in the ``authorization`` response header.
 
   2. ``GET /api/auth/tfa/options``
      Fetch the list of phone numbers eligible for SMS OTP.
@@ -132,6 +134,7 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         device_fingerprint: str = _fp.EMULATOR_FINGERPRINT,
         device_metadata: dict[str, Any] | None = None,
         sf_device_id: str = _EMULATOR_SF_DEVICE_ID,
+        sensor_data: str = _fp.EMULATOR_SENSOR_DATA,
     ) -> None:
         self.username = username
         self.password = password
@@ -139,6 +142,10 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         # Stable per-device UUID sent as x-sf-device-id.  Observed to be
         # identical across all sessions from the same device/installation.
         self._sf_device_id = sf_device_id
+        # Akamai Bot Manager sensor data sent only with the authn request.
+        # Without it, Akamai's edge returns a synthetic LGN014 error.
+        # Capture a fresh value with ``intercept/start.sh`` when this expires.
+        self._sensor_data = sensor_data
         # Device metadata is sent as base64-encoded JSON in every request.
         self._device_metadata: dict[str, Any] = device_metadata or {
             "name": "Google",
@@ -233,13 +240,14 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         if profile_tag:
             self._profile_tag = profile_tag
 
-    def _request(
+    def _request(  # pylint: disable=too-many-arguments
         self,
         method: str,
         path: str,
         *,
         json_body: dict | None = None,
         params: dict | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> requests.Response:
         """Make an authenticated HTTP request and return the response.
 
@@ -250,6 +258,8 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
             path: API path starting with ``/api/...``.
             json_body: Dict serialised as the JSON request body (POST only).
             params: URL query parameters (GET only).
+            extra_headers: Additional headers merged over the common headers.
+                Used for endpoint-specific headers like ``x-acf-sensor-data``.
 
         Returns:
             The :class:`requests.Response` object (status is already checked).
@@ -261,10 +271,13 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
             NFCUAPIError: Any other non-2xx response.
         """
         url = _BASE_URL + path
+        headers = self._headers()
+        if extra_headers:
+            headers.update(extra_headers)
         resp = self._session.request(
             method,
             url,
-            headers=self._headers(),
+            headers=headers,
             json=json_body,
             params=params,
             timeout=_REQUEST_TIMEOUT,
@@ -338,6 +351,8 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         self._preauth()
 
         # Step 1: Authenticate with username / password + device fingerprint.
+        # The authn endpoint is guarded by Akamai Bot Manager; the SDK-generated
+        # sensor data must be present or Akamai returns a synthetic LGN014.
         # The server returns Bearer token 1 in the `authorization` header.
         self._request(
             "POST",
@@ -347,6 +362,7 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
                 "password": self.password,
                 "deviceFingerprint": self._device_fingerprint,
             },
+            extra_headers={"x-acf-sensor-data": self._sensor_data},
         )
 
         # Step 2: Fetch available MFA options (phone numbers for OTP delivery).

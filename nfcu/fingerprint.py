@@ -137,6 +137,103 @@ EMULATOR_FINGERPRINT: str = (
 )
 
 
+# ── Akamai Bot Manager sensor data ────────────────────────────────────────────
+# The NFCU authn endpoint is protected by Akamai Bot Manager (formerly mPulse).
+# The Android app includes the Akamai BM SDK which generates a device attestation
+# blob sent in the ``x-acf-sensor-data`` request header.  Without this header
+# the Akamai edge returns a synthetic HTTP 200 with LGN014 ("remember your
+# device") instead of forwarding the request to the NFCU backend.
+#
+# This value was captured from the emulator during traffic analysis and must be
+# sent with every POST /api/auth/mobile/authn request.
+#
+# Format:  ``6,a,<RSA-signed-blob>,...``  (Akamai BM SDK v6 format)
+#   - The blob is RSA-signed by Akamai's SDK using a key embedded in the app.
+#   - It contains device fingerprint data, timing, and behavioural signals.
+#   - It was observed to remain valid for at least 1.5 hours after capture.
+#
+# To refresh: run ``intercept/start.sh``, log in with the NFCU app, then
+# extract the x-acf-sensor-data value from the captured authn flow.
+EMULATOR_SENSOR_DATA: str = (
+    "6,a,MNqI7YfCExY9IKhyFtlqGsCs29ew5yaUULzXSV+GKnBKEn5niQVEfN8bodmcjFACf/"
+    "xSwGtUoyKwC+eVGsEdrE1wVb48CjSuQ2tG1P8tA5om3CZLVdYIRZdclh8HLcAKqax5UYBP"
+    "LtDvQdjKJ7mHpU6xdLmjzUsKcJ89BQKdeek=,OWeBf+iTCYVELXPEUOiR5zyN3Y49XibbQ"
+    "W7fVshstx+nkW4q8zLxfm9ocERqXM2txZISS6BIhi+mm3+m9U/V3VCa78QN91cudM4R6FA"
+    "yia8yP5yXIbjIfx4xI14TDNRyh3br+ICjwV9wBPzMPXslwWw3L0vw0OzhQe/uwWFaDJM=$"
+    "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"
+    "Vbvn6sRHSQJRuT6Q==$237,9,20$$$AAQAAAAF%2f%2f%2f%2f%2f1Q1lEi1splmg9BeEN"
+    "YnKlRTOKpTQ%2fasL47NniCqJtkC6p9PJJ00%2fzqAYxJP+wXhcYaD9TnnchSXzx4AD+T+"
+    "3QWJfXNSdwjekAKlInBySJoTTEKhWIl6+3Kc0Ry%2fk3bgh4WLBtR%2fPdZl+Qr947szym"
+    "KoqUN1taSYRWGTpGISfss2krqJDxq4VW3IDugoegpYeKHrp+3EmIkSwvGvhS1nqt2gt6NJ"
+    "+2Wn+ZGDVNUbRsmIi3vB3k%2fGBxM4Ra%2f1SOo9+kQupdTeTiJtPoWLgNn%2fPu1Pbo9Q"
+    "qfNLm2O0plFOFTrm4qnZi%2f0ZluLDW8PKSWXFDZE3XqJxS4iYTU0i"
+)
+
+
 # ── Public helpers ────────────────────────────────────────────────────────────
 
 def encode(plaintext: str) -> str:
