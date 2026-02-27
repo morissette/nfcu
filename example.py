@@ -1,22 +1,23 @@
 """
 Entrypoint for NFCU
 """
-from json.decoder import JSONDecodeError
 import json
+import sys
+
 import nfcu
 
 if __name__ == "__main__":
-
     try:
-        with open('.config/creds') as df:
-            creds = json.load(df)
-        access_number = creds.get('access_number')
-        password = creds.get('password')
-    except JSONDecodeError as e:
-        access_number, password = None, None
+        with open(".config/creds", encoding="utf-8") as creds_file:
+            creds = json.load(creds_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        sys.exit(f"Could not load .config/creds: {exc}")
 
-    if access_number and password:
-        bank = nfcu.NFCU(access_number, password)
-        print(json.dumps(bank.get_account_summary()))
-    else:
-        print("Please configure .config/creds, see .config/creds-sample")
+    username = creds.get("username")
+    password = creds.get("password")
+
+    if not username or not password:
+        sys.exit("Please configure .config/creds — see .config/creds-sample")
+
+    bank = nfcu.NFCU(username, password)
+    print(json.dumps(bank.get_account_summary(), indent=2))
