@@ -1,5 +1,4 @@
-from distutils.core import setup
-from setuptools import find_packages
+from setuptools import find_packages, setup
 
 setup(
     name='nfcu',
@@ -11,5 +10,7 @@ setup(
     url='https://github.com/morissette/nfcu',
     download_url='https://github.com/morissette/nfcu/tarball/0.1.2',
     keywords=['nfcu', 'fintech', 'navy federal', 'api'],
+    python_requires='>=3.10',
+    install_requires=['requests>=2.32.0'],
     classifiers=[],
 )

@@ -1,18 +1,14 @@
 language: python
 python:
-  - "3.6"
-  - "3.7"
-  - "3.8"
-  - "3.9"
+  - "3.10"
+  - "3.11"
+  - "3.12"
+  - "3.13"
 
-# command to install dependencies
-install:
-  - pip install -r requirements.txt
-  - pip install -r requirements-test.txt
-
-# install nfcu
 before_install:
-  - pip install -e .
+  - pip install pipenv
+  - pipenv install --dev
+  - pipenv run pip install -e .
 
 stages:
   - lint
@@ -22,13 +18,12 @@ jobs:
   include:
     - stage: lint
       name: "pylint"
-      script: pylint nfcu/
+      script: pipenv run pylint nfcu/
     - name: "pycodestyle"
-      script: pycodestyle nfcu/
+      script: pipenv run pycodestyle nfcu/
     - stage: test
       name: "pytest"
-      script: pytest test/
+      script: pipenv run pytest test/
 
-# code coverage
 after_success:
-  - coveralls
+  - pipenv run coveralls

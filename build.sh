@@ -1,14 +1,15 @@
-# Create New Zip File
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Install dependencies via Pipfile
+pipenv install
+
+SITE_PACKAGES="$(pipenv run python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+
+# Create zip with Lambda handler and NFCU module
 zip -9 nfcu_alexa_skill.zip lambda_function.py
+zip -ur -9 nfcu_alexa_skill.zip nfcu/ -i "*.py"
+zip -ur -9 nfcu_alexa_skill.zip nfcu/ -i "*.json"
 
-# Install Requirements
-source venv/bin/activate 
-pip install -r requirements.txt
-
-# Add NFCU Module
-zip -ur -9 nfcu_alexa_skill.zip nfcu/ -i \*.py
-zip -ur -9 nfcu_alexa_skill.zip nfcu/ -i \*.json
-
-# Add Dependencies to Zip
-cd venv/lib/python2.7/site-packages
-zip -ur -9 ~/Projects/Personal/Alexa/nfcu/nfcu_alexa_skill.zip * -i \*.py \*.pem
+# Bundle dependencies
+(cd "$SITE_PACKAGES" && zip -ur -9 "$OLDPWD/nfcu_alexa_skill.zip" . -i "*.py" "*.pem")
