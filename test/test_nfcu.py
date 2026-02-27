@@ -11,12 +11,13 @@ Test coverage:
   - login()            authn + tfa/options flow
   - request_otp()      challenge/otp flow
   - submit_mfa()       verification + ESI activation loop + tfa/decision
-  - get_accounts()     arrangement-manager endpoint
-  - get_account()      single arrangement endpoint
-  - get_transactions() pagination query params
-  - get_card_rewards() cards endpoint
-  - get_user()         user-manager endpoint
-  - logout()           session teardown
+  - get_accounts()            arrangement-manager endpoint
+  - get_account()             single arrangement endpoint
+  - get_transactions()        pagination query params + state filter
+  - get_card_rewards()        cards endpoint
+  - get_messages_indicator()  unread message count
+  - get_user()                user-manager endpoint
+  - logout()                  session teardown
 """
 import base64
 import json
@@ -74,6 +75,7 @@ ACCOUNT_DETAIL_BODY = {"id": "uuid-1", "name": "Checking", "currentBalance": 100
 TRANSACTIONS_BODY = [{"id": "tx1"}, {"id": "tx2"}]
 REWARDS_BODY = {"cashBackBalance": 12.34}
 USER_BODY = {"fullName": "TEST USER", "email": "test@example.com"}
+MESSAGES_INDICATOR_BODY = {"unreadCount": 3}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -454,6 +456,20 @@ class TestSubmitMFA:
             with pytest.raises(NFCUMFAError):
                 client.submit_mfa("000000")
 
+    def test_esi_timeout_raises_auth_error(self):
+        """If all ESI polls return no token, NFCUAuthError must be raised."""
+        client = _make_client()
+        verify_resp = _mock_resp(200, VERIFY_BODY)
+        # Three ESI responses, none with an authorization header.
+        esi_no_token = _mock_resp(200, ESI_BODY)
+
+        with patch.object(
+            client, "_request",
+            side_effect=[verify_resp, esi_no_token, esi_no_token, esi_no_token]
+        ):
+            with pytest.raises(NFCUAuthError, match="ESI activation failed"):
+                client.submit_mfa("123456")
+
     def test_decision_failure_is_non_fatal(self):
         """tfa/decision can fail without breaking the session."""
         client = _make_client()
@@ -564,6 +580,26 @@ class TestGetTransactions:
         assert result == TRANSACTIONS_BODY
         assert len(result) == 2
 
+    def test_state_param_passed(self):
+        client = _make_client()
+        resp = _mock_resp(200, TRANSACTIONS_BODY)
+
+        with patch.object(client, "_request", return_value=resp) as mock_req:
+            client.get_transactions("uuid-1", state="UNCOMPLETED")
+
+        params = mock_req.call_args.kwargs["params"]
+        assert params["state"] == "UNCOMPLETED"
+
+    def test_default_state_is_completed(self):
+        client = _make_client()
+        resp = _mock_resp(200, TRANSACTIONS_BODY)
+
+        with patch.object(client, "_request", return_value=resp) as mock_req:
+            client.get_transactions("uuid-1")
+
+        params = mock_req.call_args.kwargs["params"]
+        assert params["state"] == "COMPLETED"
+
 
 # ── get_card_rewards() ────────────────────────────────────────────────────────
 
@@ -580,6 +616,29 @@ class TestGetCardRewards:
         path = mock_req.call_args.args[1]
         assert card_id in path
         assert "cards-presentation-service" in path
+
+
+# ── get_messages_indicator() ─────────────────────────────────────────────────
+
+class TestGetMessagesIndicator:
+    def test_returns_indicator_data(self):
+        client = _make_client()
+        resp = _mock_resp(200, MESSAGES_INDICATOR_BODY)
+
+        with patch.object(client, "_request", return_value=resp):
+            result = client.get_messages_indicator()
+
+        assert result == MESSAGES_INDICATOR_BODY
+
+    def test_calls_correct_endpoint(self):
+        client = _make_client()
+        resp = _mock_resp(200, MESSAGES_INDICATOR_BODY)
+
+        with patch.object(client, "_request", return_value=resp) as mock_req:
+            client.get_messages_indicator()
+
+        assert "message-manager" in mock_req.call_args.args[1]
+        assert "indicator" in mock_req.call_args.args[1]
 
 
 # ── get_user() ────────────────────────────────────────────────────────────────

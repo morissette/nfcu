@@ -77,6 +77,8 @@ from nfcu.exceptions import (
     NFCUSessionExpiredError,
 )
 
+__all__ = ["NFCU"]
+
 # ── API constants ─────────────────────────────────────────────────────────────
 
 _BASE_URL = "https://digitalomni.navyfederal.org"
@@ -245,7 +247,7 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         method: str,
         path: str,
         *,
-        json_body: dict | None = None,
+        json_body: dict[str, Any] | None = None,
         params: dict | None = None,
         extra_headers: dict[str, str] | None = None,
     ) -> requests.Response:
@@ -454,6 +456,11 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
             # A new token in the response header means activation succeeded.
             if esi_resp.headers.get("authorization"):
                 break  # token was captured by _update_auth_state()
+        else:
+            raise NFCUAuthError(
+                f"ESI activation failed: no Bearer token after "
+                f"{_ESI_ACTIVATION_MAX_TRIES} attempts"
+            )
 
         # Optional step: TFA decision (risk assessment).
         # The eventId is embedded inside the encrypted JWE Bearer token and
@@ -633,7 +640,8 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         """
         try:
             self._request("GET", "/api/auth/logout")
-        except Exception:  # pylint: disable=broad-except
+        except (NFCUAPIError, NFCUAuthError, NFCURateLimitError,
+                requests.RequestException):
             pass  # Best-effort; local tokens are cleared regardless.
         finally:
             # Always clear tokens so the object is in a clean state.

@@ -3,36 +3,16 @@ Exceptions for the NFCU package.
 """
 
 
-# ── Legacy exceptions (kept for backwards compatibility) ──────────────────────
-
-class NFCUGetError(Exception):
-    """Raised when a GET request returns a non-2xx status code."""
-
-
-class NFCUPostError(Exception):
-    """Raised when a POST request returns a non-2xx status code."""
-
-
-class NFCULoginError(Exception):
-    """Raised when the server rejects the login credentials."""
-
-
-class NFCUMFAError(Exception):
-    """Raised when MFA verification fails (wrong OTP, expired code, etc.)."""
-
-
-class NFCUSummaryError(Exception):
-    """Raised when the account summary endpoint returns a failure status."""
-
-
-# ── New exceptions ────────────────────────────────────────────────────────────
-
 class NFCUAuthError(Exception):
     """Raised when authentication fails due to invalid credentials or session."""
 
 
 class NFCUSessionExpiredError(NFCUAuthError):
     """Raised when the Bearer token has expired and cannot be refreshed."""
+
+
+class NFCUMFAError(Exception):
+    """Raised when MFA verification fails (wrong OTP, expired code, etc.)."""
 
 
 class NFCURateLimitError(Exception):

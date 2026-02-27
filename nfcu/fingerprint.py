@@ -271,7 +271,11 @@ def decode(fingerprint: str) -> str:
         raise ValueError(
             f"Unknown fingerprint version; expected '{_VERSION_PREFIX}' prefix"
         )
-    raw = base64.b64decode(fingerprint[len(_VERSION_PREFIX):] + "==")
+    raw_b64 = fingerprint[len(_VERSION_PREFIX):]
+    # Restore correct base64 padding: add the minimum number of '=' chars
+    # to make the length a multiple of 4.
+    padding = (4 - len(raw_b64) % 4) % 4
+    raw = base64.b64decode(raw_b64 + "=" * padding)
     return bytes(b ^ _XOR_KEY for b in raw).decode("utf-8", errors="replace")
 
 
