@@ -18,6 +18,8 @@
   - [get_accounts()](#get_accounts)
   - [get_account()](#get_account)
   - [get_transactions()](#get_transactions)
+  - [get_cards()](#get_cards)
+  - [get_card()](#get_card)
   - [get_card_rewards()](#get_card_rewards)
   - [get_user()](#get_user)
   - [get_messages_indicator()](#get_messages_indicator)
@@ -42,9 +44,8 @@ client = NFCU("your_username", "your_password")
 
 # Step 1: initiate login, get MFA phone options
 phone_options = client.login()
-print(phone_options)
 # [{"phoneNumber": "*1234", "phoneType": "M",
-#   "phoneId": "cGhvbmUtaWQtcGxhY2Vob2xkZXI=..."}]
+#   "phoneId": "cGhvbmUtaWQtcGxhY2Vob2xkZXI="}]
 
 # Step 2: request OTP
 client.request_otp()  # uses first option by default
@@ -54,23 +55,30 @@ client.submit_mfa(input("Enter OTP: "))
 
 # Step 4: use the API
 accounts = client.get_accounts()
-for product in accounts.get("products", []):
-    print(product["name"], product.get("currentBalance"))
+for group in accounts["groups"].values():
+    for acct in group["elements"]:
+        attrs = acct["attributes"]
+        name = attrs.get("alias", {}).get("value") or attrs.get("name", {}).get("value")
+        bal  = attrs.get("bookedBalance", {}).get("value", "0")
+        print(f"{name:<40} ${float(bal):>10,.2f}  {acct['id']}")
 ```
 
 ---
 
 ## Authentication Flow
 
-The NFCU mobile API uses a **five-step authentication flow** before any banking
+The NFCU mobile API uses a **six-step authentication flow** before any banking
 endpoints are accessible.  Each step rotates the Bearer token.
 
 ```
 Client                           Server
   |                                |
+  |  GET  /api/auth/config/preauth |  ← Sets XSRF-TOKEN, prd_oar, ak_bmsc cookies
+  |                                |
   |  POST /api/auth/mobile/authn   |
-  |  {username, password,          |  ← Bearer token 1 returned in
-  |   deviceFingerprint}           |    `authorization` response header
+  |  {username, password,          |  ← Bearer token 1 in `authorization` header
+  |   deviceFingerprint}           |
+  |  x-acf-sensor-data: <akamai>  |
   |                                |
   |  GET  /api/auth/tfa/options    |  ← Returns list of phone numbers
   |                                |
@@ -79,12 +87,12 @@ Client                           Server
   |  {phoneId, otpType:"SMS"}      |
   |                                |
   |  POST /api/auth/tfa/           |
-  |       challenge/verification   |  ← Bearer token 2 in response header
+  |       challenge/verification   |  ← Bearer token 2 in `authorization` header
   |  {tfaType:"OTP", otp:"123456"} |
   |                                |
   |  GET  /api/auth/esi/activation |
-  |  (called up to 3 times)        |  ← Bearer token 3 in 3rd response header
-  |                                |    (this is the session token)
+  |  (called up to 3 times)        |  ← Bearer token 3 on new/high-risk devices
+  |                                |    (verification token remains valid on known devices)
   |                                |
   |  POST /api/auth/tfa/decision   |  ← Optional risk assessment
   |  {eventId, denyRisk:true}      |
@@ -94,6 +102,12 @@ Client                           Server
 
 > **Token rotation**: Three different Bearer tokens are issued across the auth
 > flow.  The library manages these automatically via `_update_auth_state()`.
+
+> **Akamai sensor data**: The `x-acf-sensor-data` header is required on the
+> authn request.  Without it, Akamai's edge layer returns a synthetic `LGN014`
+> error before the request reaches NFCU's backend.  The library ships a
+> captured blob (`EMULATOR_SENSOR_DATA` in `nfcu/fingerprint.py`) that may
+> expire over time; re-capture it with `intercept/start.sh`.
 
 ---
 
@@ -111,6 +125,8 @@ NFCU(
     password: str,
     device_fingerprint: str = EMULATOR_FINGERPRINT,
     device_metadata: dict | None = None,
+    sf_device_id: str = EMULATOR_SF_DEVICE_ID,
+    sensor_data: str = EMULATOR_SENSOR_DATA,
 )
 ```
 
@@ -120,6 +136,8 @@ NFCU(
 | `password` | `str` | Account password |
 | `device_fingerprint` | `str` | `_v02` fingerprint string (see [Device Fingerprint](#device-fingerprint)) |
 | `device_metadata` | `dict \| None` | JSON blob for `x-nf-device-metadata` header |
+| `sf_device_id` | `str` | Stable per-device UUID for `x-sf-device-id` header |
+| `sensor_data` | `str` | Akamai BM sensor blob for `x-acf-sensor-data` header |
 
 The constructor does **not** perform authentication.  Call `login()` next.
 
@@ -206,22 +224,52 @@ handles the ESI activation token rotation and TFA decision step.
 data = client.get_accounts() -> dict
 ```
 
-Returns an overview of all accounts with current balances.
+Returns an overview of all accounts grouped by type.
 
 **Endpoint**: `GET /api/arrangement-manager/client-api/v2/arrangement-views/account-overview`
 
-**Returns** dict with `products` list.  Each product:
+**Returns** dict with `groups` (keyed by account type) and top-level `metadata`:
 
 ```json
 {
-  "id": "0a2c476a-d3bd-4a7a-9e1e-dca25ab0060a",
-  "name": "Flagship Checking",
-  "alias": "Flagship Checking - 1107",
-  "currentBalance": 1234.56,
-  "availableBalance": 1200.00,
-  "accountNumber": "XXXX1107",
-  "productKindName": "Current Account"
+  "metadata": {
+    "totalCount": 5,
+    "balanceAggregations": { "...": "..." }
+  },
+  "groups": {
+    "currentAccounts": {
+      "elements": [
+        {
+          "id": "0a2c476a-d3bd-4a7a-9e1e-dca25ab0060a",
+          "attributes": {
+            "name":             {"value": "Flagship Checking"},
+            "alias":            {"value": "Flagship Checking - 1107"},
+            "bookedBalance":    {"value": "937.58"},
+            "availableBalance": {"value": "895.45"}
+          }
+        }
+      ],
+      "metadata": {}
+    },
+    "savingsAccounts":     { "elements": [...], "metadata": {} },
+    "creditCardsAccounts": { "elements": [...], "metadata": {} }
+  }
 }
+```
+
+> **Note**: `bookedBalance` in the overview may show `0.00` for some accounts.
+> Use `get_account(id)` for the authoritative per-account balance.
+
+**Example**:
+
+```python
+accounts = client.get_accounts()
+for group in accounts["groups"].values():
+    for acct in group["elements"]:
+        attrs = acct["attributes"]
+        name = attrs.get("alias", {}).get("value") or attrs.get("name", {}).get("value")
+        bal  = attrs.get("bookedBalance", {}).get("value", "0")
+        print(f"{name}  ${float(bal):,.2f}  {acct['id']}")
 ```
 
 ---
@@ -240,6 +288,9 @@ Returns full arrangement details for one account.
 |-----------|-------------|
 | `account_id` | UUID from `get_accounts()` |
 
+**Returns** dict with fields including `name`, `bookedBalance`, `availableBalance`,
+`BBAN` (account number), `currency`, `accountOpeningDate`, `debitCards`, and more.
+
 ---
 
 ### `get_transactions()`
@@ -249,7 +300,8 @@ txns = client.get_transactions(
     account_id: str,
     from_: int = 0,
     size: int = 25,
-) -> dict
+    state: str = "COMPLETED",
+) -> list
 ```
 
 Returns paginated transactions for an account, newest first.
@@ -261,49 +313,150 @@ Returns paginated transactions for an account, newest first.
 | `account_id` | *(required)* | UUID from `get_accounts()` |
 | `from_` | `0` | Zero-based page offset |
 | `size` | `25` | Page size |
+| `state` | `"COMPLETED"` | `"COMPLETED"` or `"UNCOMPLETED"` (pending) |
 
-**Returns** dict with `transactionItems`:
+**Returns** a plain list of transaction dicts (not wrapped in a dict):
 
 ```json
-{
-  "totalElements": 487,
-  "transactionItems": [
-    {
-      "id": "tx-uuid",
-      "bookingDate": "2026-02-27",
-      "description": "AMAZON.COM",
-      "creditDebitIndicator": "DBIT",
-      "transactionAmountCurrency": {"amount": "42.99", "currencyCode": "USD"},
-      "runningBalance": 1157.01
-    }
-  ]
-}
+[
+  {
+    "id": "tx-uuid",
+    "arrangementId": "account-uuid",
+    "bookingDate": "2026-02-27",
+    "description": "AMAZON.COM",
+    "creditDebitIndicator": "DBIT",
+    "transactionAmountCurrency": {"amount": "42.99", "currencyCode": "USD"}
+  }
+]
 ```
 
 **Pagination example**:
 
 ```python
 all_txns = []
-page = 0
+offset = 0
 while True:
-    result = client.get_transactions(account_id, from_=page * 25, size=25)
-    all_txns.extend(result["transactionItems"])
-    if len(all_txns) >= result["totalElements"]:
+    page = client.get_transactions(account_id, from_=offset, size=25)
+    all_txns.extend(page)
+    if len(page) < 25:
         break
-    page += 1
+    offset += 25
 ```
+
+---
+
+### `get_cards()`
+
+```python
+cards = client.get_cards() -> list
+```
+
+Returns all payment cards (debit and credit) on the account.
+
+**Endpoint**: `GET /api/cards-presentation-service/client-api/v2/cards`
+
+**Returns** a list of card dicts:
+
+```json
+[
+  {
+    "id": "2e2d1d00-0a50-4fe2-85d5-fb3fb915c56c",
+    "brand": "VS",
+    "type": "Credit",
+    "subType": "VSEC",
+    "name": "cashRewards Secured Visa",
+    "status": "Active",
+    "lockStatus": "UNLOCKED",
+    "maskedNumber": "2751",
+    "additions": {
+      "productDescription": "cashRewards Secured Visa - 2751",
+      "ccAcctId": "3857431",
+      "spentThisPeriod": "1599.42",
+      "role": "Primary Cardholder"
+    }
+  },
+  {
+    "id": "9c31ed33...",
+    "brand": "VS",
+    "type": "Debit",
+    "name": "Debit Card",
+    "status": "Active",
+    "maskedNumber": "9774",
+    "additions": { "productDescriptionChkAcct": "Flagship Checking - 1107" }
+  }
+]
+```
+
+| Field | Description |
+|-------|-------------|
+| `id` | Card UUID (use with `get_card()` and `get_card_rewards()`) |
+| `brand` | `"VS"` (Visa), `"MC"` (Mastercard), `"SK"` (debit) |
+| `type` | `"Credit"` or `"Debit"` |
+| `status` | `"Active"` or `"Inactive"` |
+| `maskedNumber` | Last 4 digits |
+| `additions.ccAcctId` | Legacy credit card account ID in the core banking system |
+
+---
+
+### `get_card()`
+
+```python
+card = client.get_card(card_id: str) -> dict
+```
+
+Returns detailed information for a single payment card.
+
+**Endpoint**: `GET /api/cards-presentation-service/client-api/v2/cards/{card_id}`
+
+| Parameter | Description |
+|-----------|-------------|
+| `card_id` | UUID from `get_cards()` |
+
+**Returns** a single card dict with the same structure as entries from
+`get_cards()`.
 
 ---
 
 ### `get_card_rewards()`
 
 ```python
-rewards = client.get_card_rewards(account_id: str) -> dict
+rewards = client.get_card_rewards(card_id: str) -> dict
 ```
 
-Returns rewards/cash-back information for a credit card account.
+Returns cash-back rewards information for a credit card.
 
-**Endpoint**: `GET /api/cards-presentation-service/client-api/v2/rewards/{account_id}`
+**Endpoint**: `GET /api/cards-presentation-service/client-api/v2/rewards/{card_id}`
+
+| Parameter | Description |
+|-----------|-------------|
+| `card_id` | UUID of the credit card (from `get_cards()`) |
+
+**Returns**:
+
+```json
+{
+  "reward_acct_id": "00003857431",
+  "eligible": true,
+  "balance": "6.22",
+  "currency": "CASH",
+  "target_accounts": [
+    {
+      "id": "0a2c476a-d3bd-4a7a-9e1e-dca25ab0060a",
+      "account_number": "1107",
+      "available_balance": "895.45000",
+      "product_description": "Flagship Checking - 1107"
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `reward_acct_id` | Legacy reward account ID in the core banking system |
+| `eligible` | Whether redemption is currently available |
+| `balance` | Current cash-back balance as a string |
+| `currency` | `"CASH"` for cash-back cards |
+| `target_accounts` | Accounts eligible to receive a cash-back deposit |
 
 ---
 
@@ -317,6 +470,9 @@ Returns profile information for the authenticated member.
 
 **Endpoint**: `GET /api/user-manager/client-api/v2/users/me`
 
+**Returns** dict with fields including `fullName`, `email`, `membershipStatus`,
+and member-number details.
+
 ---
 
 ### `get_messages_indicator()`
@@ -326,6 +482,8 @@ indicator = client.get_messages_indicator() -> dict
 ```
 
 Returns the unread secure-message count.
+
+**Endpoint**: `GET /api/message-manager/client-api/v1/messages/indicator`
 
 **Returns**: `{"unreadCount": 3}`
 
@@ -337,7 +495,8 @@ Returns the unread secure-message count.
 client.logout()
 ```
 
-Invalidates the server-side session and clears all local tokens.
+Invalidates the server-side session and clears all local tokens.  The client
+object should not be used after this call.
 
 ---
 
@@ -345,8 +504,7 @@ Invalidates the server-side session and clears all local tokens.
 
 ### Format
 
-The `deviceFingerprint` field in every login request is a custom binary-in-text
-encoding.  Layers from outside in:
+The `deviceFingerprint` field in every login request is a custom encoding:
 
 ```
 _v02 + base64( XOR(plaintext, 0x55) )
@@ -402,7 +560,7 @@ be generated.
 
 **The library ships with a captured emulator fingerprint** (`EMULATOR_FINGERPRINT`
 in `nfcu/fingerprint.py`) that can be used for development/testing.  The server
-may accept it even with an older timestamp, or may require a fresh one.
+accepts it with the stale timestamp because the device is already registered.
 
 ### Providing Your Own Fingerprint
 
@@ -434,13 +592,12 @@ print(plaintext)
 | `NFCUMFAError` | `Exception` | Invalid or expired OTP |
 | `NFCURateLimitError` | `Exception` | HTTP 429 Too Many Requests |
 | `NFCUAPIError` | `Exception` | Any other non-2xx response |
-| `NFCULoginError` | `Exception` | Legacy; prefer `NFCUAuthError` |
-| `NFCUGetError` | `Exception` | Legacy; prefer `NFCUAPIError` |
-| `NFCUPostError` | `Exception` | Legacy; prefer `NFCUAPIError` |
 
 `NFCUAPIError` exposes `status_code` and `body` attributes:
 
 ```python
+from nfcu.exceptions import NFCUAPIError
+
 try:
     client.get_accounts()
 except NFCUAPIError as e:
@@ -451,8 +608,8 @@ except NFCUAPIError as e:
 
 ## Known Account IDs
 
-These UUIDs were observed during traffic capture on 2026-02-27 for
-a specific member account.  They will differ for all members.
+These UUIDs were observed during traffic capture on 2026-02-27 for a specific
+member account.  They will differ for all members.
 
 | Account | Display Name | UUID |
 |---------|-------------|------|
@@ -460,9 +617,9 @@ a specific member account.  They will differ for all members.
 | Easy Checking | `Easy Checking - 7514` | `f9fbaf68-95bf-4d32-8901-9c1519d6a951` |
 | Savings (6277) | `Membership Share Savings - 6277` | `31a9b8fe-7487-4cb7-8c32-ffd3c33903bf` |
 | Savings (8330) | `Membership Share Savings - 8330` | `4e345276-78f2-42c6-98c6-46a90737809a` |
-| cashRewards Visa | `cashRewards Secured Visa` | `2e2d1d00-0a50-4fe2-85d5-fb3fb915c56c` |
+| cashRewards Visa | `cashRewards Secured Visa - 2751` | `2e2d1d00-0a50-4fe2-85d5-fb3fb915c56c` |
 
-Account IDs are available at runtime via `get_accounts()["products"][n]["id"]`.
+Account IDs are available at runtime via `get_accounts()["groups"][...]["elements"][n]["id"]`.
 
 ---
 
@@ -473,8 +630,9 @@ Every request after authentication must include:
 | Header | Value | Notes |
 |--------|-------|-------|
 | `authorization` | `Bearer <token>` | Rotated across auth steps |
-| `x-xsrf-token` | 32–64 char hex | Must match `XSRF-TOKEN` cookie (double-submit CSRF pattern) |
-| `x-nf-profile-tag` | 32 char hex | Changes after OTP verification |
+| `x-xsrf-token` | UUID | Must match `XSRF-TOKEN` cookie (double-submit CSRF pattern) |
+| `x-nf-profile-tag` | 32 char alphanumeric | Generated client-side; server may update it |
+| `x-sf-device-id` | UUID | Stable per-device identifier |
 | `x-nf-device-metadata` | Base64 JSON | See below |
 | `cid` | `Mobile` | Client identifier |
 | `platform` | `AND` | Platform code for Android |
@@ -509,50 +667,39 @@ All endpoints are under `https://digitalomni.navyfederal.org`.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/auth/config/preauth` | Pre-auth configuration |
-| `POST` | `/api/auth/mobile/authn` | Username + password login |
+| `GET` | `/api/auth/config/preauth` | Initialise session; sets XSRF-TOKEN cookie |
+| `POST` | `/api/auth/mobile/authn` | Username + password + device fingerprint |
 | `GET` | `/api/auth/tfa/options` | MFA phone options |
 | `POST` | `/api/auth/tfa/challenge/otp` | Request SMS OTP |
 | `POST` | `/api/auth/tfa/challenge/verification` | Verify OTP |
-| `GET` | `/api/auth/esi/activation` | Token rotation (call 3×) |
+| `GET` | `/api/auth/esi/activation` | Token rotation (call up to 3×) |
 | `POST` | `/api/auth/tfa/decision` | Risk assessment decision |
-| `GET` | `/api/auth/status` | Session status check |
-| `GET` | `/api/auth/refresh` | Refresh Bearer token |
 | `GET` | `/api/auth/logout` | Invalidate session |
 
 ### Accounts
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/arrangement-manager/client-api/v2/arrangement-views/account-overview` | All accounts + balances |
+| `GET` | `/api/arrangement-manager/client-api/v2/arrangement-views/account-overview` | All accounts + balances grouped by type |
 | `GET` | `/api/arrangement-manager/client-api/v2/arrangements/{id}` | Single account detail |
-| `GET` | `/api/account-management-service/client-api/v1/pod/beneficiaries/{id}` | Beneficiaries |
 
 ### Transactions
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/transaction-manager/client-api/v2/transactions?arrangementId={id}&from={n}&size={n}` | Paginated transactions |
+| `GET` | `/api/transaction-manager/client-api/v2/transactions?arrangementId={id}&from={n}&size={n}&state={s}` | Paginated transactions (returns plain list) |
 
 ### Cards
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/cards-presentation-service/client-api/v2/rewards/{id}` | Card rewards/cash-back |
+| `GET` | `/api/cards-presentation-service/client-api/v2/cards` | All payment cards (debit + credit) |
+| `GET` | `/api/cards-presentation-service/client-api/v2/cards/{id}` | Single card detail |
+| `GET` | `/api/cards-presentation-service/client-api/v2/rewards/{id}` | Card rewards balance + eligible target accounts |
 
-### User & Permissions
+### User & Messaging
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/user-manager/client-api/v2/users/me` | Member profile |
-| `GET` | `/api/access-control/client-api/v3/accessgroups/user-context/service-agreements` | Service agreements |
-| `GET` | `/api/access-control/client-api/v3/accessgroups/users/permissions/summary` | Permission summary |
-
-### Content & Messaging
-
-| Method | Path | Description |
-|--------|------|-------------|
 | `GET` | `/api/message-manager/client-api/v1/messages/indicator` | Unread message count |
-| `GET` | `/api/content-manager/client-api/v1/mobile-tiles` | Home screen tile config |
-| `GET` | `/api/content-manager/client-api/v1/last-modified` | Content cache check |
-| `POST` | `/api/member-insights-service/client-api/v1/insights-offers` | Personalised offers |

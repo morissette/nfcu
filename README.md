@@ -37,8 +37,19 @@ client.submit_mfa(input("Enter OTP: "))
 
 # 4. Fetch account balances
 accounts = client.get_accounts()
-for p in accounts["products"]:
-    print(p["name"], p["currentBalance"])
+for group in accounts["groups"].values():
+    for acct in group["elements"]:
+        attrs = acct["attributes"]
+        name = attrs.get("alias", {}).get("value") or attrs.get("name", {}).get("value")
+        bal  = attrs.get("bookedBalance", {}).get("value", "0")
+        print(name, f"${float(bal):,.2f}")
+
+# 5. Fetch cards and rewards balance
+for card in client.get_cards():
+    print(card["name"], card["maskedNumber"], card["status"])
+
+rewards = client.get_card_rewards("2e2d1d00-0a50-4fe2-85d5-fb3fb915c56c")
+print(f"Cash back: ${rewards['balance']}")
 ```
 
 See [docs/API.md](docs/API.md) for the full method reference.
