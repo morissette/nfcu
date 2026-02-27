@@ -164,7 +164,9 @@ class TestNFCUInit:
         client = _make_client()
         assert client._token is None  # noqa: SLF001
         assert client._xsrf_token is None  # noqa: SLF001
-        assert client._profile_tag is None  # noqa: SLF001
+        # profile_tag is generated randomly at init — must be 32 alphanumeric chars
+        assert len(client._profile_tag) == 32  # noqa: SLF001
+        assert client._profile_tag.isalnum()  # noqa: SLF001
 
     def test_no_login_on_init(self):
         """Unlike the old API, __init__ must NOT call login()."""
@@ -185,6 +187,9 @@ class TestHeaders:
         assert "user-agent" in h
         assert "content-type" in h
         assert "x-nf-device-metadata" in h
+        # x-sf-device-id and x-nf-profile-tag must always be present
+        assert "x-sf-device-id" in h
+        assert "x-nf-profile-tag" in h
 
     def test_authorization_absent_when_no_token(self):
         client = _make_client()
@@ -195,13 +200,20 @@ class TestHeaders:
         client._token = "abc123"  # noqa: SLF001
         assert client._headers()["authorization"] == "Bearer abc123"  # noqa: SLF001
 
-    def test_xsrf_and_profile_tag_injected(self):
+    def test_xsrf_injected_when_set(self):
         client = _make_client()
         client._xsrf_token = "xsrf_val"  # noqa: SLF001
-        client._profile_tag = "tag_val"  # noqa: SLF001
         h = client._headers()  # noqa: SLF001
         assert h["x-xsrf-token"] == "xsrf_val"
-        assert h["x-nf-profile-tag"] == "tag_val"
+
+    def test_profile_tag_set_from_init(self):
+        client = _make_client()
+        h = client._headers()  # noqa: SLF001
+        assert h["x-nf-profile-tag"] == client._profile_tag  # noqa: SLF001
+
+    def test_xsrf_absent_before_preauth(self):
+        client = _make_client()
+        assert "x-xsrf-token" not in client._headers()  # noqa: SLF001
 
     def test_device_metadata_is_valid_base64_json(self):
         client = _make_client()
@@ -272,49 +284,75 @@ class TestRequest:
 
 # ── login() ──────────────────────────────────────────────────────────────────
 
+PREAUTH_BODY = {"message": "Success", "endpoints": [
+    {"serviceName": "login", "url": "https://digitalomni.navyfederal.org/api/auth/mobile/authn"}
+]}
+
+
 class TestLogin:
     def test_returns_phone_options(self):
         client = _make_client()
+        preauth_resp = _mock_resp(200, PREAUTH_BODY)
         authn_resp = _mock_resp(200, AUTHN_BODY)
         tfa_resp = _mock_resp(200, TFA_OPTIONS_BODY)
 
-        with patch.object(client, "_request", side_effect=[authn_resp, tfa_resp]):
+        with patch.object(client, "_request", side_effect=[preauth_resp, authn_resp, tfa_resp]):
             phones = client.login()
 
         assert phones == PHONE_OPTIONS
 
     def test_stores_default_phone_id(self):
         client = _make_client()
+        preauth_resp = _mock_resp(200, PREAUTH_BODY)
         authn_resp = _mock_resp(200, AUTHN_BODY)
         tfa_resp = _mock_resp(200, TFA_OPTIONS_BODY)
 
-        with patch.object(client, "_request", side_effect=[authn_resp, tfa_resp]):
+        with patch.object(client, "_request", side_effect=[preauth_resp, authn_resp, tfa_resp]):
             client.login()
 
         assert client._phone_id == PHONE_OPTIONS[0]["phoneId"]  # noqa: SLF001
 
-    def test_authn_posts_credentials_and_fingerprint(self):
+    def test_preauth_called_first(self):
         client = _make_client()
+        preauth_resp = _mock_resp(200, PREAUTH_BODY)
         authn_resp = _mock_resp(200, AUTHN_BODY)
         tfa_resp = _mock_resp(200, TFA_OPTIONS_BODY)
 
-        with patch.object(client, "_request", side_effect=[authn_resp, tfa_resp]) as mock_req:
+        with patch.object(
+            client, "_request", side_effect=[preauth_resp, authn_resp, tfa_resp]
+        ) as mock_req:
             client.login()
 
         first_call = mock_req.call_args_list[0]
-        assert first_call.args[0] == "POST"
-        assert first_call.args[1] == "/api/auth/mobile/authn"
-        body = first_call.kwargs["json_body"]
+        assert first_call.args[0] == "GET"
+        assert first_call.args[1] == "/api/auth/config/preauth"
+
+    def test_authn_posts_credentials_and_fingerprint(self):
+        client = _make_client()
+        preauth_resp = _mock_resp(200, PREAUTH_BODY)
+        authn_resp = _mock_resp(200, AUTHN_BODY)
+        tfa_resp = _mock_resp(200, TFA_OPTIONS_BODY)
+
+        with patch.object(
+            client, "_request", side_effect=[preauth_resp, authn_resp, tfa_resp]
+        ) as mock_req:
+            client.login()
+
+        authn_call = mock_req.call_args_list[1]
+        assert authn_call.args[0] == "POST"
+        assert authn_call.args[1] == "/api/auth/mobile/authn"
+        body = authn_call.kwargs["json_body"]
         assert body["username"] == USERNAME
         assert body["password"] == PASSWORD
         assert "deviceFingerprint" in body
 
     def test_empty_phone_list(self):
         client = _make_client()
+        preauth_resp = _mock_resp(200, PREAUTH_BODY)
         authn_resp = _mock_resp(200, AUTHN_BODY)
         tfa_resp = _mock_resp(200, {"phoneNumbers": []})
 
-        with patch.object(client, "_request", side_effect=[authn_resp, tfa_resp]):
+        with patch.object(client, "_request", side_effect=[preauth_resp, authn_resp, tfa_resp]):
             phones = client.login()
 
         assert phones == []

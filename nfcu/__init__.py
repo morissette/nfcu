@@ -11,7 +11,12 @@ Reverse-engineering method
   Pixel 2 emulator running Android 14.  All endpoints, headers, and request
   bodies documented here were observed in live traffic captures on 2026-02-27.
 
-Authentication flow (five steps)
+Authentication flow (six steps)
+  0. ``GET /api/auth/config/preauth``
+     Initialises the session.  Server sets ``XSRF-TOKEN``, ``prd_oar``, and
+     ``ak_bmsc`` cookies.  The ``XSRF-TOKEN`` value must be mirrored in the
+     ``x-xsrf-token`` request header for all subsequent calls.
+
   1. ``POST /api/auth/mobile/authn``
      Send username, password, and device fingerprint.  Server returns Bearer
      token 1 in the ``authorization`` response header.
@@ -35,15 +40,17 @@ Authentication flow (five steps)
      symmetric key to extract.  Passing ``eventId=None`` may be accepted.
 
 Required headers (all authenticated requests)
-  authorization       Bearer <token>
-  x-xsrf-token        Must match the ``XSRF-TOKEN`` cookie value
-  x-nf-profile-tag    32-char hex string; changes after OTP verification
-  x-nf-device-metadata  Base64-encoded JSON of device info (see _device_metadata_header)
-  cid                 "Mobile"
-  platform            "AND"
-  appversion          "2026.2.1"
-  user-agent          "NavyFederal/2026.2.1 (Android 14)"
-  content-type        "application/json"
+  authorization         Bearer <token>
+  x-xsrf-token          Must match the ``XSRF-TOKEN`` cookie (set by preauth)
+  x-nf-profile-tag      32-char random alphanumeric; generated per session,
+                        sent from the very first preauth request onwards
+  x-sf-device-id        Stable per-device UUID; generated once on install
+  x-nf-device-metadata  Base64-encoded JSON of device info
+  cid                   "Mobile"
+  platform              "AND"
+  appversion            "2026.2.1"
+  user-agent            "NavyFederal/2026.2.1 (Android 14)"
+  content-type          "application/json"
 
 Device fingerprint
   See ``nfcu/fingerprint.py`` for a full explanation of the ``_v02`` format,
@@ -53,6 +60,8 @@ from __future__ import annotations
 
 import base64
 import json
+import random
+import string
 from typing import Any
 
 import requests
@@ -83,6 +92,11 @@ _USER_AGENT = f"NavyFederal/{_APP_VERSION} (Android {_ANDROID_VERSION})"
 # Timeout in seconds for every HTTP request.
 _REQUEST_TIMEOUT = 30
 
+# Stable device UUID sent in the x-sf-device-id header.  Generated once on
+# first app install and persisted locally.  Captured from the Android emulator
+# used during traffic analysis.
+_EMULATOR_SF_DEVICE_ID = "9b7015f0-5380-43b8-a7c1-c30ebd22d608"
+
 # Number of times to poll /esi/activation before giving up.
 _ESI_ACTIVATION_MAX_TRIES = 3
 
@@ -111,16 +125,20 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
             ``x-nf-device-metadata`` header.  Defaults to emulator values.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         username: str,
         password: str,
         device_fingerprint: str = _fp.EMULATOR_FINGERPRINT,
         device_metadata: dict[str, Any] | None = None,
+        sf_device_id: str = _EMULATOR_SF_DEVICE_ID,
     ) -> None:
         self.username = username
         self.password = password
         self._device_fingerprint = device_fingerprint
+        # Stable per-device UUID sent as x-sf-device-id.  Observed to be
+        # identical across all sessions from the same device/installation.
+        self._sf_device_id = sf_device_id
         # Device metadata is sent as base64-encoded JSON in every request.
         self._device_metadata: dict[str, Any] = device_metadata or {
             "name": "Google",
@@ -140,9 +158,13 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         self._token: str | None = None
         # XSRF-TOKEN cookie value; must be echo'd back in x-xsrf-token header.
         self._xsrf_token: str | None = None
-        # 32-char hex value from x-nf-profile-tag response headers; changes
-        # after OTP verification completes.
-        self._profile_tag: str | None = None
+        # 32-char lowercase alphanumeric tag generated fresh per session.
+        # The client generates this randomly and sends it in the very first
+        # preauth request; the server echoes it back and it must be included
+        # in all subsequent requests for the session.
+        self._profile_tag: str = "".join(
+            random.choices(string.ascii_lowercase + string.digits, k=32)
+        )
         # phoneId of the first MFA option; stored so request_otp() works
         # without requiring the caller to pass it explicitly.
         self._phone_id: str | None = None
@@ -166,8 +188,8 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
     def _headers(self) -> dict[str, str]:
         """Build the common request headers required by every API call.
 
-        Token, XSRF, and profile-tag are included only when they have been
-        populated by prior auth steps.
+        token and XSRF are included only when populated by prior auth steps.
+        profile-tag and sf-device-id are always sent (set at construction).
         """
         headers: dict[str, str] = {
             "cid": "Mobile",
@@ -176,14 +198,18 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
             "user-agent": _USER_AGENT,
             "content-type": "application/json",
             "accept": "application/json, text/plain, */*",
+            # Per-device stable UUID observed in all post-preauth requests.
+            "x-sf-device-id": self._sf_device_id,
             "x-nf-device-metadata": self._device_metadata_header(),
+            # Per-session random tag; must be identical across preauth + authn.
+            "x-nf-profile-tag": self._profile_tag,
         }
         if self._token:
             headers["authorization"] = f"Bearer {self._token}"
         if self._xsrf_token:
+            # Double-submit CSRF pattern: mirror the XSRF-TOKEN cookie value
+            # as a request header.  The cookie is set by preauth.
             headers["x-xsrf-token"] = self._xsrf_token
-        if self._profile_tag:
-            headers["x-nf-profile-tag"] = self._profile_tag
         return headers
 
     def _update_auth_state(self, response: requests.Response) -> None:
@@ -268,11 +294,28 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
 
     # ── Authentication flow ───────────────────────────────────────────────────
 
+    def _preauth(self) -> None:
+        """Initialise the session by fetching auth endpoint config.
+
+        GET /api/auth/config/preauth is the very first call the NFCU app makes
+        before login.  The server responds with:
+          - ``XSRF-TOKEN`` cookie – mirrored in x-xsrf-token for all subsequent
+            requests (double-submit CSRF protection).
+          - ``prd_oar`` cookie – session routing cookie.
+          - ``ak_bmsc`` cookie – Akamai Bot Manager session cookie.
+          - JSON body listing all auth endpoint URLs (informational; we use
+            hardcoded paths).
+
+        Must be called before authn so the session cookie jar is populated.
+        """
+        self._request("GET", "/api/auth/config/preauth")
+
     def login(self) -> list[dict]:
         """Initiate login and retrieve MFA phone options.
 
-        Sends credentials and the device fingerprint to the authn endpoint.
-        If accepted, fetches the list of phone numbers eligible for SMS OTP.
+        Calls preauth to obtain session cookies (XSRF-TOKEN etc.), then sends
+        credentials and the device fingerprint to the authn endpoint.  If
+        accepted, fetches the list of phone numbers eligible for SMS OTP.
 
         Returns:
             List of phone number dicts, each containing at least:
@@ -289,6 +332,11 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
             # options[0] == {"phoneNumber": "*1234", "phoneType": "M",
             #                "phoneId": "cGhvbmUtaWQ..."}
         """
+        # Step 0: Initialise the session — sets XSRF-TOKEN and routing cookies.
+        # The NFCU app always calls this before authn.  Without it the authn
+        # endpoint has no XSRF cookie to validate and returns LGN014.
+        self._preauth()
+
         # Step 1: Authenticate with username / password + device fingerprint.
         # The server returns Bearer token 1 in the `authorization` header.
         self._request(
