@@ -456,19 +456,21 @@ class TestSubmitMFA:
             with pytest.raises(NFCUMFAError):
                 client.submit_mfa("000000")
 
-    def test_esi_timeout_raises_auth_error(self):
-        """If all ESI polls return no token, NFCUAuthError must be raised."""
+    def test_esi_no_token_does_not_raise(self):
+        """ESI may never return a token on known devices; must not raise."""
         client = _make_client()
         verify_resp = _mock_resp(200, VERIFY_BODY)
         # Three ESI responses, none with an authorization header.
         esi_no_token = _mock_resp(200, ESI_BODY)
+        decision_resp = _mock_resp(200, DECISION_BODY)
 
         with patch.object(
             client, "_request",
-            side_effect=[verify_resp, esi_no_token, esi_no_token, esi_no_token]
+            side_effect=[verify_resp, esi_no_token, esi_no_token, esi_no_token, decision_resp]
         ):
-            with pytest.raises(NFCUAuthError, match="ESI activation failed"):
-                client.submit_mfa("123456")
+            result = client.submit_mfa("123456")  # must not raise
+
+        assert result == VERIFY_BODY
 
     def test_decision_failure_is_non_fatal(self):
         """tfa/decision can fail without breaking the session."""

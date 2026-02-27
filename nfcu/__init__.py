@@ -453,14 +453,12 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         # subsequent banking API calls.
         for _ in range(_ESI_ACTIVATION_MAX_TRIES):
             esi_resp = self._request("GET", "/api/auth/esi/activation")
-            # A new token in the response header means activation succeeded.
+            # If the server rotates the token (new device / high-risk session),
+            # it returns a new Bearer token here; capture it and stop early.
+            # On known devices ESI never returns a token — the verification
+            # token (step 4) is already valid for all banking endpoints.
             if esi_resp.headers.get("authorization"):
-                break  # token was captured by _update_auth_state()
-        else:
-            raise NFCUAuthError(
-                f"ESI activation failed: no Bearer token after "
-                f"{_ESI_ACTIVATION_MAX_TRIES} attempts"
-            )
+                break
 
         # Optional step: TFA decision (risk assessment).
         # The eventId is embedded inside the encrypted JWE Bearer token and
