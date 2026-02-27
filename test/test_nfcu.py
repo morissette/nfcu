@@ -14,7 +14,9 @@ Test coverage:
   - get_accounts()            arrangement-manager endpoint
   - get_account()             single arrangement endpoint
   - get_transactions()        pagination query params + state filter
-  - get_card_rewards()        cards endpoint
+  - get_cards()               cards list endpoint
+  - get_card()                single card detail endpoint
+  - get_card_rewards()        rewards endpoint
   - get_messages_indicator()  unread message count
   - get_user()                user-manager endpoint
   - logout()                  session teardown
@@ -73,7 +75,23 @@ ACCOUNTS_BODY = {
 }
 ACCOUNT_DETAIL_BODY = {"id": "uuid-1", "name": "Checking", "currentBalance": 100.0}
 TRANSACTIONS_BODY = [{"id": "tx1"}, {"id": "tx2"}]
-REWARDS_BODY = {"cashBackBalance": 12.34}
+CARDS_BODY = [
+    {"id": "card-uuid-1", "brand": "VS", "type": "Credit", "name": "cashRewards Secured Visa",
+     "status": "Active", "maskedNumber": "2751", "additions": {"ccAcctId": "3857431"}},
+    {"id": "card-uuid-2", "brand": "VS", "type": "Debit", "name": "Debit Card",
+     "status": "Active", "maskedNumber": "9774", "additions": {}},
+]
+CARD_BODY = CARDS_BODY[0]
+REWARDS_BODY = {
+    "reward_acct_id": "00003857431",
+    "eligible": True,
+    "balance": "6.22",
+    "currency": "CASH",
+    "target_accounts": [
+        {"id": "0a2c476a-d3bd-4a7a-9e1e-dca25ab0060a", "account_number": "1107",
+         "available_balance": "895.45000", "product_description": "Flagship Checking - 1107"},
+    ],
+}
 USER_BODY = {"fullName": "TEST USER", "email": "test@example.com"}
 MESSAGES_INDICATOR_BODY = {"unreadCount": 3}
 
@@ -603,6 +621,59 @@ class TestGetTransactions:
         assert params["state"] == "COMPLETED"
 
 
+# ── get_cards() ───────────────────────────────────────────────────────────────
+
+class TestGetCards:
+    def test_returns_cards_list(self):
+        client = _make_client()
+        resp = _mock_resp(200, CARDS_BODY)
+
+        with patch.object(client, "_request", return_value=resp):
+            result = client.get_cards()
+
+        assert result == CARDS_BODY
+        assert len(result) == 2
+
+    def test_calls_correct_endpoint(self):
+        client = _make_client()
+        resp = _mock_resp(200, CARDS_BODY)
+
+        with patch.object(client, "_request", return_value=resp) as mock_req:
+            client.get_cards()
+
+        assert mock_req.call_args.args[0] == "GET"
+        path = mock_req.call_args.args[1]
+        assert "cards-presentation-service" in path
+        assert path.endswith("/cards")
+
+
+# ── get_card() ────────────────────────────────────────────────────────────────
+
+class TestGetCard:
+    def test_returns_card_detail(self):
+        client = _make_client()
+        card_id = "card-uuid-1"
+        resp = _mock_resp(200, CARD_BODY)
+
+        with patch.object(client, "_request", return_value=resp):
+            result = client.get_card(card_id)
+
+        assert result == CARD_BODY
+
+    def test_calls_correct_endpoint_with_id(self):
+        client = _make_client()
+        card_id = "2e2d1d00-0a50-4fe2-85d5-fb3fb915c56c"
+        resp = _mock_resp(200, CARD_BODY)
+
+        with patch.object(client, "_request", return_value=resp) as mock_req:
+            client.get_card(card_id)
+
+        path = mock_req.call_args.args[1]
+        assert card_id in path
+        assert "cards-presentation-service" in path
+        assert "/cards/" in path
+
+
 # ── get_card_rewards() ────────────────────────────────────────────────────────
 
 class TestGetCardRewards:
@@ -618,6 +689,17 @@ class TestGetCardRewards:
         path = mock_req.call_args.args[1]
         assert card_id in path
         assert "cards-presentation-service" in path
+
+    def test_returns_eligible_and_balance(self):
+        client = _make_client()
+        resp = _mock_resp(200, REWARDS_BODY)
+
+        with patch.object(client, "_request", return_value=resp):
+            result = client.get_card_rewards("card-uuid-1")
+
+        assert result["eligible"] is True
+        assert result["balance"] == "6.22"
+        assert len(result["target_accounts"]) == 1
 
 
 # ── get_messages_indicator() ─────────────────────────────────────────────────

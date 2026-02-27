@@ -584,23 +584,82 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         )
         return resp.json()
 
-    def get_card_rewards(self, account_id: str) -> dict:
-        """Return rewards/cash-back information for a credit card account.
-
-        Args:
-            account_id: UUID of the credit card arrangement.
+    def get_cards(self) -> list:
+        """Return all payment cards (debit and credit) on the account.
 
         Returns:
-            Raw JSON dict from the cards-presentation-service rewards endpoint.
-            Contains current cash-back balance and pending rewards.
+            List of card dicts.  Each card contains at minimum:
+              ``id``           – UUID of the card arrangement.
+              ``brand``        – Card network: ``"VS"`` (Visa), ``"MC"`` (Mastercard), etc.
+              ``type``         – ``"Debit"`` or ``"Credit"``.
+              ``name``         – Product name, e.g. ``"cashRewards Secured Visa"``.
+              ``status``       – ``"Active"`` or ``"Inactive"``.
+              ``maskedNumber`` – Last 4 digits.
+              ``additions``    – Dict with extra fields: ``productDescription``,
+                                 ``ccAcctId`` (credit card account ID in the legacy
+                                 system), ``spentThisPeriod``, etc.
+
+        Example::
+
+            for card in client.get_cards():
+                print(card["type"], card["name"], card["maskedNumber"])
+        """
+        resp = self._request(
+            "GET",
+            "/api/cards-presentation-service/client-api/v2/cards",
+        )
+        return resp.json()
+
+    def get_card(self, card_id: str) -> dict:
+        """Return detailed information for a single payment card.
+
+        Args:
+            card_id: UUID of the card (``id`` field from :meth:`get_cards`).
+
+        Returns:
+            Card dict with full details.  For credit cards, ``additions`` includes
+            ``lockStatus`` (``"UNLOCKED"`` / ``"LOCKED"``), ``spentThisPeriod``,
+            ``ccAcctId``, ``role`` (``"Primary Cardholder"``), and
+            ``productDescription``.
+
+        Example::
+
+            card = client.get_card("2e2d1d00-0a50-4fe2-85d5-fb3fb915c56c")
+            print(card["name"], card["status"], card["additions"]["spentThisPeriod"])
+        """
+        resp = self._request(
+            "GET",
+            f"/api/cards-presentation-service/client-api/v2/cards/{card_id}",
+        )
+        return resp.json()
+
+    def get_card_rewards(self, card_id: str) -> dict:
+        """Return cash-back rewards information for a credit card.
+
+        Args:
+            card_id: UUID of the credit card arrangement (from :meth:`get_cards`
+                or :meth:`get_accounts`).
+
+        Returns:
+            Raw JSON dict.  Top-level keys:
+              ``reward_acct_id``  – Legacy reward account ID (e.g. ``"00003857431"``).
+              ``eligible``        – Whether the card is eligible for redemption.
+              ``balance``         – Current cash-back balance as a string (e.g. ``"6.22"``).
+              ``currency``        – Reward type: ``"CASH"`` for cash-back cards.
+              ``target_accounts`` – List of accounts eligible to receive a redemption.
+                                    Each entry: ``{"id": "<uuid>", "account_number": "XXXX",
+                                    "available_balance": "0.00", "product_description": "..."}``.
 
         Example::
 
             rewards = client.get_card_rewards("2e2d1d00-0a50-4fe2-85d5-fb3fb915c56c")
+            print(f"${rewards['balance']} cash back, eligible: {rewards['eligible']}")
+            for acct in rewards["target_accounts"]:
+                print(acct["product_description"])
         """
         resp = self._request(
             "GET",
-            f"/api/cards-presentation-service/client-api/v2/rewards/{account_id}",
+            f"/api/cards-presentation-service/client-api/v2/rewards/{card_id}",
         )
         return resp.json()
 
