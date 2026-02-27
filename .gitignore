@@ -4,6 +4,9 @@ node-nfcu/
 creds
 *.zip
 
+# mitmproxy capture files
+intercept/capture.mitm
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
