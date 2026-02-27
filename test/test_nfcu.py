@@ -59,12 +59,19 @@ OTP_BODY = {"expiration": 360, "message": "Success"}
 VERIFY_BODY = {"name": "TEST", "message": "Success", "token": "token2"}
 ESI_BODY = {"activationCode": "abc", "acExpiry": "2026-01-01", "passcode": True}
 DECISION_BODY = {"message": "Success"}
-ACCOUNTS_BODY = {"products": [{"id": "uuid-1", "name": "Checking"}]}
-ACCOUNT_DETAIL_BODY = {"id": "uuid-1", "name": "Checking", "currentBalance": 100.0}
-TRANSACTIONS_BODY = {
-    "totalElements": 2,
-    "transactionItems": [{"id": "tx1"}, {"id": "tx2"}],
+ACCOUNTS_BODY = {
+    "groups": {
+        "currentAccounts": {
+            "elements": [
+                {"id": "uuid-1", "attributes": {"name": {"value": "Checking"}}}
+            ],
+            "metadata": {},
+        }
+    },
+    "metadata": {},
 }
+ACCOUNT_DETAIL_BODY = {"id": "uuid-1", "name": "Checking", "currentBalance": 100.0}
+TRANSACTIONS_BODY = [{"id": "tx1"}, {"id": "tx2"}]
 REWARDS_BODY = {"cashBackBalance": 12.34}
 USER_BODY = {"fullName": "TEST USER", "email": "test@example.com"}
 
@@ -73,7 +80,7 @@ USER_BODY = {"fullName": "TEST USER", "email": "test@example.com"}
 
 def _mock_resp(
     status_code: int = 200,
-    json_body: dict | None = None,
+    json_body: dict | list | None = None,
     headers: dict | None = None,
     cookies: dict | None = None,
 ) -> MagicMock:
@@ -81,8 +88,9 @@ def _mock_resp(
     m = MagicMock(spec=requests.Response)
     m.status_code = status_code
     m.ok = status_code < 400
-    m.json.return_value = json_body or {}
-    m.text = json.dumps(json_body or {})
+    body = json_body if json_body is not None else {}
+    m.json.return_value = body
+    m.text = json.dumps(body)
     m.headers = headers or {}
     # requests.Session has a .cookies CookieJar; mimic get() on it
     cookie_jar = MagicMock()
@@ -554,7 +562,7 @@ class TestGetTransactions:
             result = client.get_transactions("uuid-1")
 
         assert result == TRANSACTIONS_BODY
-        assert len(result["transactionItems"]) == 2
+        assert len(result) == 2
 
 
 # ── get_card_rewards() ────────────────────────────────────────────────────────

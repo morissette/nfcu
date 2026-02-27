@@ -480,17 +480,29 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
     def get_accounts(self) -> dict:
         """Return an overview of all accounts with balances.
 
+        The API response groups accounts by type under the ``groups`` key.
+        Each group contains an ``elements`` list; each element is an account
+        with an ``attributes`` dict.  Balance values live under the
+        ``bookedBalance`` and ``availableBalance`` attribute keys.
+
         Returns:
-            Raw JSON dict from the arrangement-manager account-overview
-            endpoint.  Typical top-level keys: ``products``, ``totalBalance``.
-            Each product entry contains the arrangement ID (UUID) required by
-            other methods.
+            Raw JSON dict.  Top-level keys:
+              ``metadata``  – aggregate totals and sync timestamps.
+              ``groups``    – dict of account groups (``currentAccounts``,
+                              ``savingsAccounts``, ``creditCardsAccounts``).
+                              Each group: ``{"elements": [...], "metadata": {}}``
+                              Each element: ``{"id": "<uuid>", "attributes": {...}}``
 
         Example::
 
             data = client.get_accounts()
-            for product in data["products"]:
-                print(product["name"], product["currentBalance"])
+            for group in data["groups"].values():
+                for acct in group["elements"]:
+                    attrs = acct["attributes"]
+                    name  = attrs.get("name",  {}).get("value", "")
+                    alias = attrs.get("alias", {}).get("value", "") or name
+                    bal   = attrs.get("bookedBalance", {}).get("value", "0")
+                    print(alias, "$" + bal, acct["id"])
         """
         resp = self._request(
             "GET",
@@ -525,27 +537,32 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
         account_id: str,
         from_: int = 0,
         size: int = 25,
-    ) -> dict:
+        state: str = "COMPLETED",
+    ) -> list:
         """Return transactions for an account, newest first.
+
+        The API returns a plain JSON list (not wrapped in a dict).  Each item
+        is a transaction with ``id``, ``bookingDate``, ``description``,
+        ``transactionAmountCurrency`` (amount + currencyCode), and
+        ``creditDebitIndicator`` (``"CRDT"`` for credit, ``"DBIT"`` for debit).
 
         Args:
             account_id: UUID of the account.
             from_: Zero-based offset for pagination (default 0).
             size: Number of transactions to return per page (default 25).
+            state: Transaction state filter — ``"COMPLETED"`` (default) or
+                   ``"UNCOMPLETED"`` for pending transactions.
 
         Returns:
-            Dict with ``transactionItems`` list and ``totalElements`` count.
-            Each transaction contains: ``id``, ``bookingDate``,
-            ``transactionAmountCurrency`` (amount + currency), ``description``,
-            ``creditDebitIndicator``, ``runningBalance``, etc.
+            List of transaction dicts.
 
         Example::
 
-            txns = client.get_transactions(account_id, from_=0, size=50)
-            for t in txns["transactionItems"]:
+            txns = client.get_transactions(account_id, size=10)
+            for t in txns:
                 sign = "+" if t["creditDebitIndicator"] == "CRDT" else "-"
-                print(sign, t["transactionAmountCurrency"]["amount"],
-                      t["description"])
+                amt  = t["transactionAmountCurrency"]["amount"]
+                print(t["bookingDate"], sign + amt, t["description"])
         """
         resp = self._request(
             "GET",
@@ -556,6 +573,8 @@ class NFCU:  # pylint: disable=too-many-instance-attributes
                 "size": size,
                 "orderBy": "bookingDate",
                 "direction": "DESC",
+                "secDirection": "ASC",
+                "state": state,
             },
         )
         return resp.json()

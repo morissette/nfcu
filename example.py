@@ -50,26 +50,40 @@ if __name__ == "__main__":
 
     # ── Account overview ──────────────────────────────────────────────────────
     accounts = client.get_accounts()
-    products = accounts.get("products", [])
+    groups = accounts.get("groups", {})
+
+    # Flatten all account elements across groups for display.
+    all_accts = [
+        acct
+        for group in groups.values()
+        for acct in group.get("elements", [])
+    ]
 
     print(f"{'Account':<40} {'Balance':>12}  ID")
     print("-" * 80)
-    for p in products:
-        name = p.get("alias") or p.get("name", "Unknown")
-        balance = p.get("currentBalance", 0)
-        account_id = p.get("id", "")
-        print(f"{name:<40} ${balance:>11,.2f}  {account_id}")
+    for acct in all_accts:
+        attrs = acct.get("attributes", {})
+        name = (
+            attrs.get("alias", {}).get("value")
+            or attrs.get("name", {}).get("value", "Unknown")
+        )
+        balance = attrs.get("bookedBalance", {}).get("value", "0")
+        account_id = acct.get("id", "")
+        print(f"{name:<40} ${float(balance):>11,.2f}  {account_id}")
 
     # ── Recent transactions for the first account ─────────────────────────────
-    if products:
-        first_id = products[0]["id"]
-        first_name = products[0].get("alias") or products[0].get("name")
+    if all_accts:
+        first_id = all_accts[0]["id"]
+        attrs0 = all_accts[0].get("attributes", {})
+        first_name = (
+            attrs0.get("alias", {}).get("value")
+            or attrs0.get("name", {}).get("value", "Account")
+        )
         txns = client.get_transactions(first_id, size=5)
-        items = txns.get("transactionItems", [])
 
-        print(f"\nLast {len(items)} transactions — {first_name}:")
+        print(f"\nLast {len(txns)} transactions — {first_name}:")
         print("-" * 60)
-        for t in items:
+        for t in txns:
             date = t.get("bookingDate", "")
             desc = t.get("description", "")[:30]
             amount = t.get("transactionAmountCurrency", {}).get("amount", "0")
