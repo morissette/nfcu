@@ -2,7 +2,7 @@
 Navy Federal Credit Union API client.
 
 This module reverse-engineers the NFCU mobile app API (Android v2026.2.1).
-The original node-nfcu project (https://github.com/tjhorner/node-nfcu) targeted
+The original node-nfcu project (https://github.com/tjhorner/node-nfcu) was last updated in 2016 and targeted
 the now-tombstoned ``mservices.navyfcu.org`` endpoint.  This rewrite targets the
 current Backbase-based microservices API at ``digitalomni.navyfederal.org``.
 
