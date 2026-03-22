@@ -19,9 +19,11 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install dependencies
+        env:
+          PIPENV_PYTHON: python
         run: |
           pip install pipenv
-          pipenv --python python install --dev
+          pipenv install --dev --skip-lock
           pipenv run pip install -e .
       - uses: reviewdog/action-setup@v1
         with:
@@ -29,15 +31,17 @@ jobs:
       - name: pylint
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PIPENV_PYTHON: python
         run: |
           pipenv run pylint --output-format=parseable nfcu/ | \
-            reviewdog -f=pylint -name=pylint -reporter=github-pr-review -fail-level=error
+            reviewdog -efm="%f:%l:%c: %t%n: %m" -name=pylint -reporter=github-pr-review -fail-level=error
       - name: pycodestyle
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PIPENV_PYTHON: python
         run: |
           pipenv run pycodestyle nfcu/ | \
-            reviewdog -f=pycodestyle -name=pycodestyle -reporter=github-pr-review -fail-level=any
+            reviewdog -efm="%f:%l:%c: %t%n %m" -name=pycodestyle -reporter=github-pr-review -fail-level=any
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -51,9 +55,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
+        env:
+          PIPENV_PYTHON: python
         run: |
           pip install pipenv
-          pipenv --python python install --dev
+          pipenv install --dev --skip-lock
           pipenv run pip install -e .
       - name: pytest
         run: pipenv run pytest test/ -v
